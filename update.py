@@ -22,7 +22,7 @@ from datetime import datetime
 # PATHS
 # ──────────────────────────────────────────────────────────
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
-EXCEL_FILE = os.path.join(BASE_DIR, 'POWER_BI.xlsx')
+EXCEL_FILE = os.path.join(BASE_DIR, 'POWER BI.xlsx')
 TEMPLATE   = os.path.join(BASE_DIR, 'template.html')
 LOGO_FILE  = os.path.join(BASE_DIR, 'LogoDHVertical.jpg')
 OUTPUT     = os.path.join(BASE_DIR, 'index.html')
