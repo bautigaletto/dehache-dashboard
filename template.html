@@ -1094,6 +1094,7 @@ function renderArticulos(){
   if(window.staleLevel===undefined) window.staleLevel=null;
 
   const allArts=buildArticleStats();
+  if(window.showPareto===undefined) window.showPareto=false;
 
   // Stale list: articles with more than 12 months since their last sale (across full history)
   const staleAll=buildStaleArticles();
@@ -1140,6 +1141,69 @@ function renderArticulos(){
     </div>
 
     ${staleHtml}
+
+    ${(()=>{
+      const sorted=[...allArts].sort((a,b)=>b.imp-a.imp);
+      const totalImpAll=sorted.reduce((s,a)=>s+a.imp,0)||1;
+      let acc=0,paretoArts=[];
+      for(const a of sorted){acc+=a.imp;paretoArts.push(a);if(acc/totalImpAll>=0.8)break;}
+      const paretoCount=paretoArts.length;
+      const paretoPct=(paretoCount/sorted.length*100).toFixed(1);
+      const paretoRev=acc;
+      const maxP=paretoArts[0]?paretoArts[0].imp:1;
+      const rows=paretoArts.map((a,k)=>`<tr data-art="${a.k}" style="cursor:pointer">
+        <td class="rk0">${k+1}</td>
+        <td>
+          <div style="font-weight:600;font-size:12px;margin-bottom:3px;line-height:1.3">${a.name}</div>
+          <div class="tr"><div class="fl" style="width:${a.imp/maxP*100}%;background:linear-gradient(90deg,var(--red),var(--red2))"></div></div>
+        </td>
+        <td class="r">${fmtM(a.imp)}</td>
+        <td class="r" style="color:var(--muted);font-family:Oswald;font-size:11px">${(a.imp/totalImpAll*100).toFixed(1)}%</td>
+      </tr>`).join('');
+      const moreNote='';
+      return `<div id="paretoKpi" style="cursor:pointer;margin-bottom:16px">
+        <div class="card" style="border:1.5px solid #c9d6f5;background:#f6f9ff;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:14px 18px">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;flex:1">
+            <span style="font-size:22px">📊</span>
+            <div>
+              <div style="font-family:Oswald;font-size:15px;font-weight:600;color:var(--navy)">Análisis Pareto · 20/80</div>
+              <div style="font-size:12.5px;color:var(--muted);margin-top:2px"><b style="color:var(--navy);font-family:Oswald">${paretoCount} artículos</b> (${paretoPct}% del catálogo) generan el <b style="color:var(--ok)">80%</b> de la facturación · <b style="color:var(--navy);font-family:Oswald">${fmtM(paretoRev)}</b></div>
+            </div>
+          </div>
+          <span style="background:${window.showPareto?'#fdeaec':'#e8eeff'};color:${window.showPareto?'var(--red)':'var(--navy)'};font-size:12px;font-weight:700;padding:6px 14px;border-radius:8px;white-space:nowrap">${window.showPareto?'✕ Cerrar':'Ver detalle →'}</span>
+        </div>
+      </div>
+      ${window.showPareto?`<div class="card" id="paretoCard" style="border:1.5px solid #c9d6f5;margin-bottom:16px">
+        <div class="sec-h" style="margin-bottom:14px;flex-wrap:wrap">
+          <span class="bar" style="background:var(--navy2)"></span><h2>Top artículos — 80% de la facturación</h2>
+          <span class="sub">${paretoCount} artículos · ${paretoPct}% del catálogo · ${fmtM(paretoRev)}</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:14px">
+          <div style="background:#f4f7ff;border-radius:10px;padding:10px 14px;text-align:center">
+            <div style="font-family:Oswald;font-size:24px;font-weight:700;color:var(--navy)">${paretoCount}</div>
+            <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Artículos clave</div>
+          </div>
+          <div style="background:#f4f7ff;border-radius:10px;padding:10px 14px;text-align:center">
+            <div style="font-family:Oswald;font-size:24px;font-weight:700;color:var(--red)">${paretoPct}%</div>
+            <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Del catálogo</div>
+          </div>
+          <div style="background:#f4f7ff;border-radius:10px;padding:10px 14px;text-align:center">
+            <div style="font-family:Oswald;font-size:24px;font-weight:700;color:var(--ok)">80%</div>
+            <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Facturación</div>
+          </div>
+          <div style="background:#f4f7ff;border-radius:10px;padding:10px 14px;text-align:center">
+            <div style="font-family:Oswald;font-size:24px;font-weight:700;color:var(--ink)">${fmtM(paretoRev)}</div>
+            <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Monto generado</div>
+          </div>
+        </div>
+        <div style="max-height:480px;overflow:auto">
+          <table class="tbl">
+            <thead><tr><th></th><th>Artículo</th><th class="r">Facturación</th><th class="r">Part. %</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>${moreNote}
+        </div>
+      </div>`:''}`;
+    })()}
 
     <!-- Search + sort -->
     <div style="position:relative;margin-bottom:16px">
@@ -1220,6 +1284,10 @@ function renderArticulos(){
     app().querySelectorAll('[data-sort]').forEach(x=>x.classList.toggle('on',x===b));
     paintTable();
   });
+
+  // ---- pareto toggle ----
+  document.getElementById('paretoKpi').onclick=()=>{window.showPareto=!window.showPareto;renderArticulos();};
+  app().querySelectorAll('#paretoCard [data-art]').forEach(r=>r.onclick=()=>articleModal(+r.dataset.art));
 
   // ---- stale articles toggle ----
   document.getElementById('staleKpi').onclick=()=>{
