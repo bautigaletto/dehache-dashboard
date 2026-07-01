@@ -442,10 +442,20 @@ function renderPrincipal(){
   const idxAll=filtered({vendor:null,zone:null,level:null});
   const byLvlAll=groupSum(idxAll,R.n);
   const beItems=M.levels.map((nm,i)=>({i,nm,sales:byLvlAll.get(i)||0,tgt:M.levelTargets[i]*monthsCount()}))
-    .filter(d=>d.tgt>0).sort((a,b)=>b.tgt-a.tgt);
-  const beHtml=beItems.map(d=>{const pp=pct(d.sales,d.tgt);const w=Math.min(pp,100);
+    .filter(d=>d.tgt>0||d.nm==='Oportunidades').sort((a,b)=>b.tgt-a.tgt);
+  const beHtml=beItems.map(d=>{const isSel=state.level===d.i;
+    if(d.tgt===0){
+      // Oportunidades: no target, just show sales as a bar relative to biggest level
+      const maxSales=Math.max(...beItems.filter(x=>x.tgt>0).map(x=>x.sales),1);
+      const w=Math.min(d.sales/maxSales*100,100);
+      return `<div class="be ${isSel?'sel':''}" data-lvl="${d.i}">
+        <div class="top"><span class="nm">${d.nm}</span>
+          <span class="vals"><b>${fmtM(d.sales)}</b> <span style="color:var(--muted);font-size:11px;font-weight:400">sin objetivo</span></span></div>
+        <div class="track"><div class="fill" style="width:${Math.max(w,1)}%;background:linear-gradient(90deg,#6E86C0,#3A5BA0)"></div></div></div>`;
+    }
+    const pp=pct(d.sales,d.tgt);const w=Math.min(pp,100);
     const col=pp>=100?'linear-gradient(90deg,#1f8a5b,#27a06c)':pp>=70?'linear-gradient(90deg,var(--navy),var(--navy2))':'linear-gradient(90deg,var(--red),var(--red2))';
-    const out=w>78;const isSel=state.level===d.i;
+    const out=w>78;
     return `<div class="be ${isSel?'sel':''}" data-lvl="${d.i}">
       <div class="top"><span class="nm">${d.nm}</span>
         <span class="vals"><b>${fmtM(d.sales)}</b> / ${fmtM(d.tgt)}</span></div>
@@ -479,7 +489,7 @@ function renderPrincipal(){
         ${kpi('Compra prom./cliente',fmtM(avgCli),'por cliente',false,'~')}
         ${kpi('Clientes activos',fmtN(cli),'con compras',false,'@')}
         ${kpi('Unidades vendidas',fmtN(uni),'ítems facturados',false,'▦')}
-        ${kpi('Niveles en meta',beItems.filter(d=>d.sales>=d.tgt).length+' / '+beItems.length,'superan equilibrio',beItems.filter(d=>d.sales>=d.tgt).length<beItems.length/2,'◎')}
+        ${kpi('Niveles en meta',beItems.filter(d=>d.tgt>0&&d.sales>=d.tgt).length+' / '+beItems.filter(d=>d.tgt>0).length,'superan equilibrio',beItems.filter(d=>d.tgt>0&&d.sales>=d.tgt).length<beItems.filter(d=>d.tgt>0).length/2,'◎')}
       </div>
     </div>
   </div>
@@ -669,7 +679,10 @@ function renderVendedores(){
       ${kpi('Comprobantes',fmtN(inv),'emitidos',false,'#')}
     </div>
     <div class="grid cols2">
-      <div class="card"><div class="sec-h" style="margin-bottom:12px"><span class="bar"></span><h2>Mix de productos</h2></div>${donut(groupSum(idx,R.n),M.levels,160)}</div>
+      <div class="card"><div class="sec-h" style="margin-bottom:12px"><span class="bar"></span><h2>Mix de productos</h2></div>
+        ${(()=>{const lvlMap=groupSum(idx,R.n);const lvlList=[...lvlMap.entries()].map(([k,v])=>({k,label:M.levels[k],v})).filter(d=>d.v>0).sort((a,b)=>b.v-a.v);const mx=lvlList.length?lvlList[0].v:1;const tot=lvlList.reduce((s,d)=>s+d.v,0)||1;
+        return '<div class="rk">'+lvlList.map((d,i)=>`<div class="row" style="cursor:default"><div class="lbl"><b style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:2px;background:${PALETTE[i%PALETTE.length]};flex:none;display:inline-block"></span>${d.label}</b><span style="font-family:Oswald;font-weight:600;color:var(--ink)">${fmtM(d.v)}</span></div><div class="tr"><div class="fl" style="width:${d.v/mx*100}%;background:${PALETTE[i%PALETTE.length]}"></div></div></div>`).join('')+'</div>';})()}
+      </div>
       <div class="card"><div class="sec-h" style="margin-bottom:12px"><span class="bar"></span><h2>Zonas con más ventas</h2></div>
         <div class="rk">${zTop.map(d=>`<div class="row" data-z="${d.k}"><div class="lbl"><b>${d.label}</b><span>${fmtM(d.v)}</span></div>
           <div class="tr"><div class="fl" style="width:${d.v/zMax*100}%"></div></div></div>`).join('')}</div></div>
