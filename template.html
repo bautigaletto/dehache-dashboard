@@ -1107,6 +1107,7 @@ function renderArticulos(){
 
   const allArts=buildArticleStats();
   if(window.showPareto===undefined) window.showPareto=false;
+  if(window.paretoLevelFilter===undefined) window.paretoLevelFilter=null;
 
   // Stale list: articles with more than 12 months since their last sale (across full history)
   const staleAll=buildStaleArticles();
@@ -1215,17 +1216,38 @@ function renderArticulos(){
           paretoArts.forEach(a=>{const lvl=a.level>=0?M.levels[a.level]:'Sin nivel';lvlTotals.set(lvl,(lvlTotals.get(lvl)||0)+a.imp);});
           const lvlList=[...lvlTotals.entries()].sort((a,b)=>b[1]-a[1]);
           const maxL=lvlList[0]?lvlList[0][1]:1;
+          const filteredParetoArts=window.paretoLevelFilter!=null?paretoArts.filter(a=>a.level>=0&&M.levels[a.level]===window.paretoLevelFilter):[];
+          const lvlDetailHtml=window.paretoLevelFilter!=null?`
+            <div style="margin-top:14px;border-top:1px solid #dde4f5;padding-top:14px">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+                <div style="font-size:12.5px;font-weight:700;color:var(--navy)">${window.paretoLevelFilter} · ${filteredParetoArts.length} artículo${filteredParetoArts.length===1?'':'s'} en el Pareto</div>
+                <button id="clearParetoLvl" style="padding:4px 10px;border-radius:7px;background:#eef3ff;border:1px solid #c9d6f5;color:var(--navy);font-size:12px;font-weight:700;cursor:pointer">✕ Ver todos los niveles</button>
+              </div>
+              <table class="tbl">
+                <thead><tr><th></th><th>Artículo</th><th class="r">Facturación</th><th class="r">Part. %</th></tr></thead>
+                <tbody>${filteredParetoArts.map((a,k)=>`<tr data-art="${a.k}" style="cursor:pointer">
+                  <td class="rk0">${k+1}</td>
+                  <td><div style="font-weight:600;font-size:12px;margin-bottom:3px;line-height:1.3">${a.name}</div>
+                    <div class="tr"><div class="fl" style="width:${filteredParetoArts[0]?a.imp/filteredParetoArts[0].imp*100:0}%;background:linear-gradient(90deg,var(--navy),var(--navy2))"></div></div>
+                  </td>
+                  <td class="r">${fmtM(a.imp)}</td>
+                  <td class="r" style="color:var(--muted);font-family:Oswald;font-size:11px">${(a.imp/totalImpAll*100).toFixed(1)}%</td>
+                </tr>`).join('')}</tbody>
+              </table>
+            </div>`:'';
           return `<div style="margin-bottom:14px">
-            <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-weight:700;margin-bottom:10px">Composición por nivel</div>
-            <div class="rk">${lvlList.map((l,i)=>`<div class="row" style="cursor:default">
+            <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-weight:700;margin-bottom:10px">Composición por nivel <span style="color:var(--navy);font-weight:500;font-size:10px;text-transform:none">· tocá un nivel para ver sus artículos</span></div>
+            <div class="rk" id="paretoLvlList">${lvlList.map((l,i)=>{const isActive=window.paretoLevelFilter===l[0];return`<div class="row pareto-lvl-row" data-lvlname="${l[0]}" style="cursor:pointer;border-radius:9px;padding:3px 4px;transition:.12s;${isActive?'background:#eef3ff;outline:1.5px solid #c9d6f5':''}">
               <div class="lbl">
                 <b style="display:flex;align-items:center;gap:6px">
                   <span style="width:10px;height:10px;border-radius:2px;background:${PALETTE[i%PALETTE.length]};flex:none;display:inline-block"></span>${l[0]}
+                  ${isActive?'<span style="font-size:10px;color:var(--navy);font-weight:500">▼ detalle</span>':''}
                 </b>
                 <span style="font-family:Oswald;font-weight:600;color:var(--ink)">${fmtM(l[1])} <span style="color:var(--muted);font-size:11px;font-weight:400">(${(l[1]/paretoRev*100).toFixed(0)}%)</span></span>
               </div>
               <div class="tr"><div class="fl" style="width:${l[1]/maxL*100}%;background:${PALETTE[i%PALETTE.length]}"></div></div>
-            </div>`).join('')}</div>
+            </div>`;}).join('')}</div>
+            ${lvlDetailHtml}
           </div>`;
         })()}
         <div style="border-top:1px solid var(--line2);padding-top:14px;max-height:520px;overflow:auto">
@@ -1319,8 +1341,16 @@ function renderArticulos(){
   });
 
   // ---- pareto toggle ----
-  document.getElementById('paretoKpi').onclick=()=>{window.showPareto=!window.showPareto;renderArticulos();};
+  document.getElementById('paretoKpi').onclick=()=>{window.showPareto=!window.showPareto;if(!window.showPareto)window.paretoLevelFilter=null;renderArticulos();};
   app().querySelectorAll('#paretoCard [data-art]').forEach(r=>r.onclick=()=>articleModal(+r.dataset.art));
+  app().querySelectorAll('.pareto-lvl-row').forEach(r=>r.onclick=()=>{
+    const nm=r.dataset.lvlname;
+    window.paretoLevelFilter=window.paretoLevelFilter===nm?null:nm;
+    renderArticulos();
+    setTimeout(()=>{const el=document.querySelector('#paretoCard');if(el)el.scrollIntoView({behavior:'smooth',block:'nearest'});},80);
+  });
+  const clrPL=document.getElementById('clearParetoLvl');
+  if(clrPL)clrPL.onclick=(e)=>{e.stopPropagation();window.paretoLevelFilter=null;renderArticulos();};
 
   // ---- stale articles toggle ----
   document.getElementById('staleKpi').onclick=()=>{
