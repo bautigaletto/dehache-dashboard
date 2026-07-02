@@ -241,7 +241,6 @@ select,input{font-family:inherit;font-size:14px}
     <button data-pg="zonas">Zonas</button>
     <button data-pg="clientes">Clientes</button>
     <button data-pg="articulos">Artículos</button>
-    <button data-pg="compras">Compras</button>
   </div>
   <div class="spacer"></div>
   <div class="note">Objetivo mensual<br><b style="color:#fff;font-family:Oswald">$300 M</b> · datos al __LASTDAY__</div>
@@ -265,7 +264,6 @@ select,input{font-family:inherit;font-size:14px}
   <button data-pg="zonas"><svg class="bi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s7-6.4 7-11a7 7 0 10-14 0c0 4.6 7 11 7 11z"/><circle cx="12" cy="10" r="2.6"/></svg>Zonas</button>
   <button data-pg="clientes"><svg class="bi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>Clientes</button>
   <button data-pg="articulos"><svg class="bi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Artículos</button>
-  <button data-pg="compras"><svg class="bi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>Compras</button>
 </nav>
 
 <div class="modal" id="modal"><div class="box"><button class="x" id="modalX">✕</button><div id="modalBody"></div></div></div>
@@ -376,11 +374,10 @@ function syncControls(){
   const isPrincipal=state.page==='principal';
   const isClientes=state.page==='clientes';
   const isArticulos=state.page==='articulos';
-  const isCompras=state.page==='compras';
-  const hideAll=isPrincipal||isClientes||isArticulos||isCompras;
+  const hideAll=isPrincipal||isClientes||isArticulos;
   document.querySelectorAll('#periods button').forEach(b=>
     b.classList.toggle('on',(b.dataset.p==='all'?'all':+b.dataset.p)===state.period));
-  document.getElementById('periods').style.display=(isClientes||isArticulos||isCompras)?'none':'';
+  document.getElementById('periods').style.display=(isClientes||isArticulos)?'none':'';
   const sv=document.getElementById('selVendor');sv.value=state.vendor==null?'':state.vendor;
   const sz=document.getElementById('selZone');sz.value=state.zone==null?'':state.zone;
   const sl=document.getElementById('selLevel');sl.value=state.level==null?'':state.level;
@@ -388,7 +385,7 @@ function syncControls(){
   document.getElementById('selZoneWrap').style.display=hideAll?'none':'';
   document.getElementById('selVendorWrap').classList.toggle('active',state.vendor!=null);
   document.getElementById('selZoneWrap').classList.toggle('active',state.zone!=null);
-  document.getElementById('selLevelWrap').style.display=(isClientes||isArticulos||isCompras)?'none':'';
+  document.getElementById('selLevelWrap').style.display=(isClientes||isArticulos)?'none':'';
   document.getElementById('selLevelWrap').classList.toggle('active',state.level!=null);
   document.querySelectorAll('#tabs button,#bnav button').forEach(b=>b.classList.toggle('on',b.dataset.pg===state.page));
   updateClear();
@@ -420,8 +417,7 @@ function render(){syncControls();
   else if(state.page==='vendedores')renderVendedores();
   else if(state.page==='zonas')renderZonas();
   else if(state.page==='clientes')renderClientes();
-  else if(state.page==='articulos')renderArticulos();
-  else renderCompras();
+  else renderArticulos();
   window.scrollTo({top:0,behavior:'instant'});
 }
 function filterNote(){
@@ -1328,247 +1324,6 @@ function renderArticulos(){
 }
 
 
-/* ---- COMPRAS ---- */
-function renderCompras(){
-  // ── shared data ──────────────────────────────────────────
-  const curM  = M.currentMonth;          // e.g. 6
-  const dayN  = M.lastDayNum;            // e.g. 23
-  const dayT  = M.daysInCurrentMonth;    // e.g. 30
-  const projFactor = dayT / dayN;        // scale incomplete month
-
-  // Build per-article stats once (2026 monthly arrays from M)
-  const allArts = buildArticleStats();   // {k, name, imp, qty, activeMonths, trailing, level, monthsSince}
-  const artMap  = new Map(allArts.map(a=>[a.k,a]));
-
-  // ── 1. PROYECCIÓN DEL MES ────────────────────────────────
-  function projSection(){
-    const rows = M.levels.map((nm,i)=>{
-      const imp2026 = M.lvlMonthly2026[i] || [];
-      const curSales = imp2026[curM-1] || 0;
-      const proj    = Math.round(curSales * projFactor);
-      const tgt     = (M.levelTargets[i]||0);
-      const prevM   = curM>1?imp2026[curM-2]:0;
-      const vs25    = M.lvlMonthly2025[i]?M.lvlMonthly2025[i][curM-1]:0;
-      const vsComp  = vs25>0?((curSales/vs25-1)*100).toFixed(0):null;
-      const arrow   = vsComp!=null?(+vsComp>=0?'▲':'▼'):'';
-      const arrowCol= vsComp!=null?(+vsComp>=0?'var(--ok)':'var(--red)'):'var(--muted)';
-      const projVsTgt = tgt>0?((proj/tgt-1)*100).toFixed(0):null;
-      return {nm,i,curSales,proj,tgt,prevM,vs25,vsComp,arrow,arrowCol,projVsTgt};
-    }).filter(r=>r.curSales>0||r.tgt>0).sort((a,b)=>b.proj-a.proj);
-    const totalProj = rows.reduce((s,r)=>s+r.proj,0);
-    const totalTgt  = M.totalTarget;
-    const totalCur  = rows.reduce((s,r)=>s+r.curSales,0);
-    const totVsTgt  = totalTgt>0?((totalProj/totalTgt-1)*100).toFixed(0):null;
-
-    return `<div class="card" style="margin-bottom:14px">
-      <div class="sec-h" style="margin-bottom:14px">
-        <span class="bar" style="background:#1f8a5b"></span>
-        <h2>Proyección de cierre de mes</h2>
-        <span class="sub">Basado en ${dayN} días transcurridos de ${dayT} · factor ×${projFactor.toFixed(2)}</span>
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px">
-        <div style="background:#f0faf5;border-radius:10px;padding:10px 14px;border:1px solid #c3e6d6;text-align:center">
-          <div style="font-family:Oswald;font-size:22px;font-weight:700;color:var(--ok)">${fmtM(totalProj)}</div>
-          <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px">Proyección total</div>
-        </div>
-        <div style="background:#f4f7ff;border-radius:10px;padding:10px 14px;border:1px solid #c9d6f5;text-align:center">
-          <div style="font-family:Oswald;font-size:22px;font-weight:700;color:var(--navy)">${fmtM(totalCur)}</div>
-          <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px">Facturado hoy</div>
-        </div>
-        <div style="background:${totVsTgt!=null&&+totVsTgt>=0?'#f0faf5':'#fff8f8'};border-radius:10px;padding:10px 14px;border:1px solid ${totVsTgt!=null&&+totVsTgt>=0?'#c3e6d6':'#f6c6cc'};text-align:center">
-          <div style="font-family:Oswald;font-size:22px;font-weight:700;color:${totVsTgt!=null&&+totVsTgt>=0?'var(--ok)':'var(--red)'}">${totVsTgt!=null?(+totVsTgt>=0?'▲ +':'▼ ')+totVsTgt+'%':'—'}</div>
-          <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px">vs objetivo $300 M</div>
-        </div>
-      </div>
-      <table class="tbl">
-        <thead><tr><th>Nivel</th><th class="r">Facturado</th><th class="r">Proyección</th><th class="r">Objetivo</th><th class="r">vs Objetivo</th><th class="r">vs Jun 2025</th></tr></thead>
-        <tbody>${rows.map(r=>`<tr style="cursor:default">
-          <td><b>${r.nm}</b></td>
-          <td class="r">${fmtM(r.curSales)}</td>
-          <td class="r" style="color:var(--ok);font-weight:700">${fmtM(r.proj)}</td>
-          <td class="r" style="color:var(--muted)">${r.tgt?fmtM(r.tgt):'—'}</td>
-          <td class="r" style="color:${r.projVsTgt!=null?(+r.projVsTgt>=0?'var(--ok)':'var(--red)'):'var(--muted)'};font-weight:600">${r.projVsTgt!=null?(+r.projVsTgt>=0?'▲ +':'▼ ')+r.projVsTgt+'%':'—'}</td>
-          <td class="r" style="color:${r.arrowCol};font-weight:600">${r.vsComp!=null?r.arrow+' '+Math.abs(+r.vsComp)+'%':'sin datos'}</td>
-        </tr>`).join('')}</tbody>
-      </table>
-    </div>`;
-  }
-
-  // ── 2. YoY COMPARATIVA ───────────────────────────────────
-  function yoySection(){
-    const rows=M.levels.map((nm,i)=>{
-      const imp26=M.lvlMonthly2026[i]||[];const imp25=M.lvlMonthly2025[i]||[];
-      const months=[];
-      for(let m=0;m<curM;m++){
-        const v26=imp26[m]||0;const v25=imp25[m]||0;
-        const pct=v25>0?((v26/v25-1)*100).toFixed(0):null;
-        months.push({m,v26,v25,pct});
-      }
-      const tot26=months.reduce((s,x)=>s+x.v26,0);
-      const tot25=months.reduce((s,x)=>s+x.v25,0);
-      const totPct=tot25>0?((tot26/tot25-1)*100).toFixed(0):null;
-      return{nm,i,months,tot26,tot25,totPct};
-    }).filter(r=>r.tot26>0||r.tot25>0).sort((a,b)=>b.tot26-a.tot26);
-    const monthHdrs=M.months.slice(0,curM).map(m=>`<th class="r">${m}</th>`).join('');
-    return `<div class="card" style="margin-bottom:14px">
-      <div class="sec-h" style="margin-bottom:12px">
-        <span class="bar" style="background:#E0982B"></span>
-        <h2>Comparativa año anterior (2025 vs 2026)</h2>
-        <span class="sub">Verde = crecimiento · Rojo = caída</span>
-      </div>
-      <div style="overflow-x:auto"><table class="tbl" style="min-width:600px">
-        <thead><tr><th>Nivel</th>${monthHdrs}<th class="r">Acum.</th><th class="r">%</th></tr></thead>
-        <tbody>${rows.map(r=>`<tr style="cursor:default">
-          <td><b>${r.nm}</b></td>
-          ${r.months.map(x=>`<td class="r" style="font-size:11.5px">
-            <div style="color:var(--ink);font-family:Oswald;font-weight:600">${fmtM(x.v26)}</div>
-            <div style="color:${x.pct!=null?(+x.pct>=0?'var(--ok)':'var(--red)'):'var(--muted)'};font-size:10px;font-weight:700">${x.pct!=null?(+x.pct>=0?'▲ +':'▼ ')+Math.abs(+x.pct)+'%':'—'}</div>
-          </td>`).join('')}
-          <td class="r" style="font-family:Oswald;font-weight:700">${fmtM(r.tot26)}</td>
-          <td class="r" style="color:${r.totPct!=null?(+r.totPct>=0?'var(--ok)':'var(--red)'):'var(--muted)'};font-weight:700">${r.totPct!=null?(+r.totPct>=0?'▲ +':'▼ ')+Math.abs(+r.totPct)+'%':'—'}</td>
-        </tr>`).join('')}</tbody>
-      </table></div>
-    </div>`;
-  }
-
-  // ── 3. TENDENCIA (últimos 3 vs anteriores 3) ─────────────
-  function trendSection(){
-    // Period A: months 1-3 (Jan-Mar), Period B: months 4-curM
-    const periodA=[0,1,2];const periodB=[];for(let i=3;i<curM;i++)periodB.push(i);
-    if(periodB.length===0) return '<div class="hint" style="margin-bottom:14px">ℹ️ <b>Tendencia disponible desde abril.</b> Necesitamos al menos 4 meses de datos para comparar períodos.</div>';
-    const arts=allArts.map(a=>{
-      const imp=M.artMonthly2026imp[a.k]||[];
-      const qty=M.artMonthly2026qty[a.k]||[];
-      const sumA=periodA.reduce((s,m)=>s+(imp[m]||0),0);
-      const sumB=periodB.reduce((s,m)=>s+(imp[m]||0),0);
-      const avgA=sumA/periodA.length;const avgB=sumB/periodB.length;
-      const growth=avgA>0?(avgB/avgA-1)*100:null;
-      return{...a,sumA,sumB,avgA,avgB,growth};
-    }).filter(a=>a.sumA+a.sumB>0);
-    const growing=arts.filter(a=>a.growth!=null&&a.growth>20).sort((a,b)=>b.growth-a.growth).slice(0,15);
-    const declining=arts.filter(a=>a.growth!=null&&a.growth<-20).sort((a,b)=>a.growth-b.growth).slice(0,15);
-    const pALabel=`${M.months[0]}–${M.months[2]}`;
-    const pBLabel=`${M.months[3]}–${M.months[curM-1]}`;
-    const artRows=(arr,col)=>arr.map((a,k)=>`<tr data-art="${a.k}" style="cursor:pointer">
-      <td class="rk0">${k+1}</td>
-      <td style="font-size:12px;font-weight:600">${a.name}</td>
-      <td class="r" style="color:var(--muted)">${fmtM(a.sumA)}</td>
-      <td class="r">${fmtM(a.sumB)}</td>
-      <td class="r" style="color:${col};font-weight:700">${(+a.growth>=0?'▲ +':'▼ ')+Math.abs(a.growth).toFixed(0)}%</td>
-    </tr>`).join('');
-    return `<div class="card" style="margin-bottom:14px">
-      <div class="sec-h" style="margin-bottom:14px">
-        <span class="bar" style="background:var(--navy2)"></span>
-        <h2>Tendencia de artículos</h2>
-        <span class="sub">${pALabel} vs ${pBLabel} · variación &gt;20%</span>
-      </div>
-      <div class="grid cols2">
-        <div>
-          <div style="font-size:11px;color:var(--ok);text-transform:uppercase;font-weight:700;letter-spacing:.5px;margin-bottom:8px">▲ En crecimiento (${growing.length})</div>
-          ${growing.length?`<table class="tbl"><thead><tr><th></th><th>Artículo</th><th class="r">${pALabel}</th><th class="r">${pBLabel}</th><th class="r">Var.</th></tr></thead><tbody>${artRows(growing,'var(--ok)')}</tbody></table>`:'<div style="color:var(--muted);font-size:13px;padding:8px">Sin artículos con crecimiento &gt;20%</div>'}
-        </div>
-        <div>
-          <div style="font-size:11px;color:var(--red);text-transform:uppercase;font-weight:700;letter-spacing:.5px;margin-bottom:8px">▼ En caída (${declining.length})</div>
-          ${declining.length?`<table class="tbl"><thead><tr><th></th><th>Artículo</th><th class="r">${pALabel}</th><th class="r">${pBLabel}</th><th class="r">Var.</th></tr></thead><tbody>${artRows(declining,'var(--red)')}</tbody></table>`:'<div style="color:var(--muted);font-size:13px;padding:8px">Sin artículos con caída &gt;20%</div>'}
-        </div>
-      </div>
-    </div>`;
-  }
-
-  // ── 4. ALERTA PARETO EN CAÍDA ────────────────────────────
-  function paretoCaidaSection(){
-    const sorted=[...allArts].sort((a,b)=>b.imp-a.imp);
-    const totalImp=sorted.reduce((s,a)=>s+a.imp,0)||1;
-    let acc=0,paretoArts=[];
-    for(const a of sorted){acc+=a.imp;paretoArts.push(a);if(acc/totalImp>=0.8)break;}
-    const periodA=[0,1,2];const periodB=[];for(let i=3;i<curM;i++)periodB.push(i);
-    if(periodB.length===0) return '<div class="hint" style="margin-bottom:14px">ℹ️ <b>Alerta Pareto disponible desde abril.</b> Necesitamos al menos 4 meses para detectar tendencias.</div>';
-    const caida=paretoArts.map(a=>{
-      const imp=M.artMonthly2026imp[a.k]||[];
-      const sumA=periodA.reduce((s,m)=>s+(imp[m]||0),0);
-      const sumB=periodB.reduce((s,m)=>s+(imp[m]||0),0);
-      const avgA=sumA/periodA.length;const avgB=sumB/periodB.length;
-      const growth=avgA>0?(avgB/avgA-1)*100:null;
-      return{...a,sumA,sumB,growth};
-    }).filter(a=>a.growth!=null&&a.growth<-15).sort((a,b)=>a.growth-b.growth);
-    if(caida.length===0) return `<div class="card" style="border:1.5px solid #c3e6d6;background:#f0faf5;margin-bottom:14px;padding:16px">
-      <div style="display:flex;align-items:center;gap:10px"><span style="font-size:24px">✅</span>
-      <div><b style="color:var(--ok)">Todos los artículos Pareto están estables o en crecimiento</b>
-      <div style="font-size:12.5px;color:var(--muted);margin-top:2px">Ninguno de los ${paretoArts.length} artículos clave cayó más de 15%</div></div></div></div>`;
-    const pALabel=`${M.months[0]}–${M.months[2]}`;const pBLabel=`${M.months[3]}–${M.months[curM-1]}`;
-    return `<div class="card" style="border:1.5px solid #f6c6cc;background:#fff8f8;margin-bottom:14px">
-      <div class="sec-h" style="margin-bottom:12px">
-        <span class="bar" style="background:var(--red)"></span>
-        <h2 style="color:var(--red)">⚠ Artículos Pareto en caída</h2>
-        <span class="sub">${caida.length} de ${paretoArts.length} artículos clave cayeron &gt;15% (${pALabel} vs ${pBLabel})</span>
-      </div>
-      <table class="tbl">
-        <thead><tr><th></th><th>Artículo</th><th class="r">${pALabel} prom/mes</th><th class="r">${pBLabel} prom/mes</th><th class="r">Caída</th><th class="r">Facturado 2026</th></tr></thead>
-        <tbody>${caida.map((a,k)=>`<tr data-art="${a.k}" style="cursor:pointer">
-          <td class="rk0">${k+1}</td>
-          <td style="font-size:12px;font-weight:600">${a.name}</td>
-          <td class="r" style="color:var(--muted)">${fmtM(a.sumA/periodA.length)}</td>
-          <td class="r">${fmtM(a.sumB/periodB.length)}</td>
-          <td class="r" style="color:var(--red);font-weight:700">▼ ${Math.abs(a.growth).toFixed(0)}%</td>
-          <td class="r">${fmtM(a.imp)}</td>
-        </tr>`).join('')}</tbody>
-      </table>
-    </div>`;
-  }
-
-  // ── 5. ROTACIÓN DE ARTÍCULOS ─────────────────────────────
-  function rotacionSection(){
-    const arts=allArts.filter(a=>a.qty>0&&a.activeMonths>0).map(a=>{
-      const avgQtyMes=a.qty/a.activeMonths;
-      const avgImpMes=a.imp/a.activeMonths;
-      return{...a,avgQtyMes,avgImpMes};
-    }).sort((a,b)=>b.avgImpMes-a.avgImpMes).slice(0,50);
-    return `<div class="card" style="margin-bottom:14px">
-      <div class="sec-h" style="margin-bottom:12px">
-        <span class="bar" style="background:var(--navy)"></span>
-        <h2>Velocidad de rotación de artículos</h2>
-        <span class="sub">Top 50 por facturación promedio mensual · útil para planificar stock</span>
-      </div>
-      <div style="overflow-x:auto"><table class="tbl">
-        <thead><tr><th></th><th>Artículo</th><th class="r">Prom. $/ mes</th><th class="r">Prom. uds/mes</th><th class="r">Meses activo</th><th class="r">Total 2026</th></tr></thead>
-        <tbody>${arts.map((a,k)=>`<tr data-art="${a.k}" style="cursor:pointer">
-          <td class="rk0">${k+1}</td>
-          <td style="font-size:12px;font-weight:600;line-height:1.3">${a.name}</td>
-          <td class="r" style="font-weight:700;color:var(--navy)">${fmtM(a.avgImpMes)}</td>
-          <td class="r" style="color:var(--muted)">${a.avgQtyMes.toFixed(1)}</td>
-          <td class="r" style="color:var(--muted)">${a.activeMonths} / ${M.months.length}</td>
-          <td class="r">${fmtM(a.imp)}</td>
-        </tr>`).join('')}</tbody>
-      </table>
-    </div>`;
-  }
-
-  // ── RENDER ───────────────────────────────────────────────
-  app().innerHTML=`
-  <div class="sec">
-    <div class="sec-h"><span class="bar"></span><h2>Análisis de Compras</h2>
-      <span class="sub">Herramientas para optimizar el abastecimiento · datos al ${M.lastDay}</span></div>
-
-    <div style="display:flex;flex-direction:column;gap:0">
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px">
-        <a href="#sec-proy" style="padding:8px 14px;background:#f0faf5;border:1px solid #c3e6d6;border-radius:20px;font-size:12.5px;font-weight:600;color:var(--ok);text-decoration:none">① Proyección del mes</a>
-        <a href="#sec-yoy" style="padding:8px 14px;background:#fff8f0;border:1px solid #f5d9b0;border-radius:20px;font-size:12.5px;font-weight:600;color:var(--amber);text-decoration:none">② Año anterior</a>
-        <a href="#sec-trend" style="padding:8px 14px;background:#f4f7ff;border:1px solid #c9d6f5;border-radius:20px;font-size:12.5px;font-weight:600;color:var(--navy);text-decoration:none">③ Tendencia artículos</a>
-        <a href="#sec-pareto" style="padding:8px 14px;background:#fff8f8;border:1px solid #f6c6cc;border-radius:20px;font-size:12.5px;font-weight:600;color:var(--red);text-decoration:none">④ Alerta Pareto</a>
-        <a href="#sec-rot" style="padding:8px 14px;background:#f4f7ff;border:1px solid #c9d6f5;border-radius:20px;font-size:12.5px;font-weight:600;color:var(--navy2);text-decoration:none">⑤ Rotación stock</a>
-      </div>
-
-      <div id="sec-proy">${projSection()}</div>
-      <div id="sec-yoy">${yoySection()}</div>
-      <div id="sec-trend">${trendSection()}</div>
-      <div id="sec-pareto">${paretoCaidaSection()}</div>
-      <div id="sec-rot">${rotacionSection()}</div>
-    </div>
-  </div>`;
-
-  // Wire article row clicks → modal
-  app().querySelectorAll('[data-art]').forEach(r=>r.onclick=()=>articleModal(+r.dataset.art));
-}
 
 /* ============ INIT ============ */
 buildControls();render();
