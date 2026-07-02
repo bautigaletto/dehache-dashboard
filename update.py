@@ -22,7 +22,7 @@ from datetime import datetime
 # PATHS
 # ──────────────────────────────────────────────────────────
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
-EXCEL_FILE = os.path.join(BASE_DIR, 'POWER BI.xlsx')
+EXCEL_FILE = os.path.join(BASE_DIR, 'POWER_BI.xlsx')
 TEMPLATE   = os.path.join(BASE_DIR, 'template.html')
 LOGO_FILE  = os.path.join(BASE_DIR, 'LogoDHVertical.jpg')
 OUTPUT     = os.path.join(BASE_DIR, 'index.html')
@@ -75,6 +75,9 @@ LEVEL_TARGETS = {
     'Servicio de Fletes':        14_000_000,
 }
 TOTAL_TARGET = 300_000_000
+
+ALL_MONTHS_SHORT = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+ALL_MONTHS_FULL  = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
 # ──────────────────────────────────────────────────────────
 # LOGO
@@ -184,6 +187,48 @@ def process(excel_path):
                         if m>12 and art_level.get(a)=='Oportunidades')
     print(f'  Artículos +1 año sin movimiento: {stale_total} (excluye {stale_oport} de Oportunidades)')
 
+    import calendar as cal
+    lastDayNum = ref.day
+    daysInCurrentMonth = cal.monthrange(ref.year, ref.month)[1]
+    currentMonth = ref.month
+
+    # ── 2025 & 2026 level monthly sales ──
+    f25 = fAll[fAll['Fecha'].dt.year == 2025].copy()
+    f25['m'] = f25['Fecha'].dt.month
+    lvlMonthly2025 = []
+    for l in levels:
+        row = [0]*12
+        for m, g in f25[f25['Niveles']==l].groupby('m'):
+            row[m-1] = int(g['Importe'].sum().round())
+        lvlMonthly2025.append(row)
+
+    lvlMonthly2026 = []
+    for l in levels:
+        row = [0]*currentMonth
+        for m, g in f[f['Niveles']==l].groupby('m'):
+            if m <= currentMonth:
+                row[m-1] = int(g['Importe'].sum().round())
+        lvlMonthly2026.append(row)
+
+    totalMonthly2025 = [0]*12
+    for m, g in f25.groupby('m'):
+        totalMonthly2025[m-1] = int(g['Importe'].sum().round())
+
+    # ── Article monthly sales+qty 2026 ──
+    art_grp = f.groupby('ai')
+    artMonthly2026imp = []
+    artMonthly2026qty = []
+    for k in range(len(arts)):
+        imps = [0]*currentMonth; qtys = [0]*currentMonth
+        if k in art_grp.groups:
+            g2 = art_grp.get_group(k)
+            for m, mg in g2.groupby('m'):
+                if m <= currentMonth:
+                    imps[m-1] = int(mg['impr'].sum())
+                    qtys[m-1] = round(float(mg['qr'].sum()), 2)
+        artMonthly2026imp.append(imps)
+        artMonthly2026qty.append(qtys)
+
     meta = {
         'vendors':   [VEND_DISP.get(v, v.title()) for v in vendors],
         'zones':     [zm[1] if zm[1] else z for zm,z in zip(zmeta,zones)],
@@ -196,9 +241,18 @@ def process(excel_path):
         'articleMonthsSinceLastSale': months_since_arr,
         'articleLevelIdx':            art_lvl_idx,
         'totalTarget': TOTAL_TARGET,
-        'months':     ['Ene','Feb','Mar','Abr','May','Jun'],
-        'monthsFull': ['Enero','Febrero','Marzo','Abril','Mayo','Junio'],
-        'lastDay':    ref.strftime('%d/%m/%Y'),
+        'months':     ALL_MONTHS_SHORT[:currentMonth],
+        'monthsFull': ALL_MONTHS_FULL[:currentMonth],
+        'months2025': ALL_MONTHS_SHORT,
+        'lvlMonthly2025':    lvlMonthly2025,
+        'lvlMonthly2026':    lvlMonthly2026,
+        'artMonthly2026imp': artMonthly2026imp,
+        'artMonthly2026qty': artMonthly2026qty,
+        'totalMonthly2025':  totalMonthly2025,
+        'lastDayNum':        lastDayNum,
+        'daysInCurrentMonth': daysInCurrentMonth,
+        'currentMonth':      currentMonth,
+        'lastDay':           ref.strftime('%d/%m/%Y'),
     }
     return {'meta': meta, 'rows': rows}
 
