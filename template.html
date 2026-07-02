@@ -228,6 +228,18 @@ select,input{font-family:inherit;font-size:14px}
 }
 @media(max-width:380px){ .kpi .val{font-size:20px} }
 @media (prefers-reduced-motion:reduce){ *{transition:none!important} }
+@media print{
+  body{padding:0;background:#fff;font-size:12px}
+  .hdr,.ctrl,.bnav,.modal,#tabs,#bnav,.btn-clear,.sel,.search,
+  .periods,button:not(.no-print){display:none!important}
+  .wrap{padding:8px;max-width:100%}
+  .card{box-shadow:none;border:1px solid #ddd;break-inside:avoid}
+  .tbl th,.tbl td{padding:5px 7px}
+  #printArea{display:block!important}
+  #printArea .ph{font-size:16px;font-weight:700;color:#01216A;margin-bottom:4px}
+  #printArea .ps{font-size:11px;color:#666;margin-bottom:14px}
+  a[href]:after{content:none}
+}
 </style>
 </head>
 <body>
@@ -1108,6 +1120,7 @@ function renderArticulos(){
         <h2 style="color:var(--red)">Artículos sin movimiento</h2>
         <span class="sub">${stale.length} de ${staleAll.length} · más de 1 año sin movimiento</span>
         <button id="closeStale" style="margin-left:8px;padding:4px 10px;border-radius:8px;background:#fff;border:1px solid #f6c6cc;color:var(--red);font-size:12px;font-weight:700;cursor:pointer">✕ Cerrar</button>
+        <button id="printStale" style="margin-left:6px;padding:4px 12px;border-radius:8px;background:var(--navy);color:#fff;font-size:12px;font-weight:700;cursor:pointer">⬇ Exportar / Imprimir</button>
       </div>
       <div style="margin-bottom:12px">
         <div class="sel" style="max-width:280px">
@@ -1316,6 +1329,48 @@ function renderArticulos(){
   };
   const closeStale=document.getElementById('closeStale');
   if(closeStale)closeStale.onclick=()=>{window.showStaleArts=false;window.staleLevel=null;renderArticulos();};
+  const printStale=document.getElementById('printStale');
+  if(printStale)printStale.onclick=()=>{
+    const stale=buildStaleArticles();
+    const filtered=window.staleLevel==null?stale:stale.filter(a=>a.level===window.staleLevel);
+    const lvlFilter=window.staleLevel!=null?' — '+M.levels[window.staleLevel]:'';
+    const rows=filtered.map((a,k)=>`<tr style="page-break-inside:avoid">
+      <td style="padding:5px 8px;border-bottom:1px solid #eee;font-size:11px;color:#888;width:28px">${k+1}</td>
+      <td style="padding:5px 8px;border-bottom:1px solid #eee;font-size:12.5px;font-weight:600">${a.name}</td>
+      <td style="padding:5px 8px;border-bottom:1px solid #eee;font-size:12px;text-align:right;color:#5b6b86">${a.level>=0?M.levels[a.level]:'—'}</td>
+      <td style="padding:5px 8px;border-bottom:1px solid #eee;font-size:12px;text-align:right;color:#B11425;font-weight:700">${fmtMonthsAgo(a.monthsSince)}</td>
+      <td style="padding:5px 8px;border-bottom:1px solid #eee;font-size:12px;text-align:right">${a.imp>0?'$'+Math.round(a.imp).toLocaleString('es-AR'):'Sin ventas en 2026'}</td>
+    </tr>`).join('');
+    const win=window.open('','_blank','width=900,height=700');
+    win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
+      <title>Artículos sin movimiento — DEHACHE 2026</title>
+      <style>
+        body{font-family:Inter,sans-serif;margin:24px 32px;color:#0f182b}
+        h1{font-size:20px;color:#01216A;margin:0 0 4px}
+        .sub{font-size:12px;color:#5b6b86;margin-bottom:20px}
+        table{width:100%;border-collapse:collapse}
+        th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#5b6b86;
+           padding:7px 8px;border-bottom:2px solid #01216A}
+        th:nth-child(3),th:nth-child(4),th:nth-child(5){text-align:right}
+        tr:nth-child(even){background:#f8f9fb}
+        .footer{margin-top:18px;font-size:10.5px;color:#8a97ad;border-top:1px solid #e4e8f0;padding-top:8px}
+        @media print{
+          button{display:none}
+          body{margin:12px 16px}
+        }
+      </style></head><body>
+      <h1>Artículos sin movimiento +1 año${lvlFilter}</h1>
+      <div class="sub">${filtered.length} artículo${filtered.length===1?'':'s'} · Datos al ${M.lastDay} · Dashboard DEHACHE 2026</div>
+      <button onclick="window.print()" style="margin-bottom:16px;padding:9px 20px;background:#01216A;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">🖨 Imprimir / Guardar PDF</button>
+      <table>
+        <thead><tr><th>#</th><th>Artículo</th><th style="text-align:right">Nivel</th><th style="text-align:right">Sin movimiento</th><th style="text-align:right">Histórico 2026</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="footer">Generado el ${new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})} · DEHACHE Panel de Ventas 2026</div>
+    </body></html>`);
+    win.document.close();
+    win.focus();
+  };
   const slSel=document.getElementById('staleLevelSel');
   if(slSel)slSel.onchange=e=>{window.staleLevel=e.target.value===''?null:+e.target.value;renderArticulos();};
 
