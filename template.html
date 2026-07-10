@@ -1087,11 +1087,12 @@ function buildStaleArticles(){
   if(!msl)return[];
   const lvlIdx=M.articleLevelIdx;
   const oportIdx=M.levels.indexOf('Oportunidades');
+  const noStaleNames=['Oportunidades','Griferías'];
   const statsByKey=new Map(buildArticleStats().map(a=>[a.k,a]));
   const out=[];
   for(let k=0;k<M.articles.length;k++){
     if(msl[k]>12){
-      if(lvlIdx && lvlIdx[k]===oportIdx)continue; // exclude "Oportunidades" level
+      if(lvlIdx && noStaleNames.indexOf(M.levels[lvlIdx[k]])>=0)continue; // exclude Oportunidades & Griferías
       const s=statsByKey.get(k);
       out.push({k,name:M.articles[k],imp:s?s.imp:0,qty:s?s.qty:0,
         activeMonths:s?s.activeMonths:0,level:s?s.level:(lvlIdx?lvlIdx[k]:-1),monthsSince:msl[k]});

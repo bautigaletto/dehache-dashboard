@@ -4,7 +4,7 @@ DEHACHE Dashboard 2026 – Actualizador de datos
 Uso:
     python update.py
 
-Lee POWER_BI.xlsx en la misma carpeta y genera index.html actualizado.
+Lee 'POWER BI.xlsx' en la misma carpeta y genera index.html actualizado.
 Requiere: pandas, openpyxl, Pillow
     pip install pandas openpyxl Pillow
 """
@@ -16,6 +16,7 @@ import os
 import sys
 import base64
 import io
+import calendar as cal
 from datetime import datetime
 
 # ──────────────────────────────────────────────────────────
@@ -28,7 +29,29 @@ LOGO_FILE  = os.path.join(BASE_DIR, 'LogoDHVertical.jpg')
 OUTPUT     = os.path.join(BASE_DIR, 'index.html')
 
 # ──────────────────────────────────────────────────────────
-# CONFIG – objectives and display names
+# MONTH NAMES
+# ──────────────────────────────────────────────────────────
+ALL_MONTHS_SHORT = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+ALL_MONTHS_FULL  = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto',
+                    'Septiembre','Octubre','Noviembre','Diciembre']
+
+# ──────────────────────────────────────────────────────────
+# ARTICLE ALIASES  (same product, different names over time)
+# Add entries here whenever a product code gets renamed.
+# Format: 'CODE': 'CANONICAL NAME'
+# ──────────────────────────────────────────────────────────
+ART_ALIASES = {
+    '1501': '1501 - MEMBRANA C/ALU MGX - 40 KGS. NO CRACK PLUS',
+}
+
+def normalize_art(name):
+    if not isinstance(name, str):
+        return name
+    code = name.split(' - ')[0].strip()
+    return ART_ALIASES.get(code, name)
+
+# ──────────────────────────────────────────────────────────
+# CONFIG
 # ──────────────────────────────────────────────────────────
 VEND_DISP = {
     'FANSINI GUSTAVO ANGEL':    'Gustavo Fansini',
@@ -55,6 +78,7 @@ LVL_DISP = {
     'Servicio de Fletes':      'Fletes',
     'Seccoplac':               'Seccoplac',
     'Oportunidades':           'Oportunidades',
+    'Griferias':               'Griferías',
     'Colocación Membrana':     'Colocación membrana',
     'Pisos':                   'Pisos',
 }
@@ -73,11 +97,10 @@ LEVEL_TARGETS = {
     'Sanitarios':                23_900_000,
     'Zingueria':                  4_500_000,
     'Servicio de Fletes':        14_000_000,
+    'Griferias':              2_200_000,
+    # Oportunidades: target=0 → shown without break-even line
 }
 TOTAL_TARGET = 300_000_000
-
-ALL_MONTHS_SHORT = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
-ALL_MONTHS_FULL  = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
 # ──────────────────────────────────────────────────────────
 # LOGO
@@ -108,7 +131,10 @@ def process(excel_path):
     df['Fecha'] = pd.to_datetime(df['Fecha'])
     df['Centro_str'] = df['Centro'].astype(str).str.zfill(4)
 
-    # Global exclusions (applied to full history too)
+    # Normalize renamed articles
+    df['Artículo'] = df['Artículo'].apply(normalize_art)
+
+    # Global exclusions
     mask = (
         (df['Niveles'] != 'Descuentos') &
         (df['Niveles'] != 'Varios') &
@@ -117,17 +143,23 @@ def process(excel_path):
     )
     fAll = df[mask].dropna(subset=['Niveles']).copy()
 
-    ref = fAll['Fecha'].max()
+    ref        = fAll['Fecha'].max()
     last_all   = fAll.groupby('Artículo')['Fecha'].max()
     art_level  = fAll.sort_values('Fecha').groupby('Artículo')['Niveles'].last()
 
-    # 2026-only slice for dashboard rows
-    f = fAll[fAll['Fecha'].dt.year == 2026].copy()
+    fAll['m'] = fAll['Fecha'].dt.month
+    fAll['y'] = fAll['Fecha'].dt.year
+
+    # 2026-only slice
+    f = fAll[fAll['y'] == 2026].copy()
     f['m'] = f['Fecha'].dt.month
     f['Nombre Zona'] = f['Nombre Zona'].fillna('Sin zona')
 
+    lastDayNum        = ref.day
+    daysInCurrentMonth = cal.monthrange(ref.year, ref.month)[1]
+    currentMonth      = ref.month
+
     print(f'  Filas 2026 filtradas: {len(f):,}  |  Fecha máx: {ref.strftime("%d/%m/%Y")}')
-    print(f'  Total facturado 2026: ${f["Importe"].sum():,.0f}')
 
     vendors = sorted(f['Vendedor'].unique())
     zones   = sorted(f['Nombre Zona'].unique())
@@ -148,25 +180,20 @@ def process(excel_path):
     invkeys = sorted(f['invkey'].unique())
     ii = {k:i for i,k in enumerate(invkeys)}
 
-    f['vi']  = f['Vendedor'].map(vi)
-    f['zi']  = f['Nombre Zona'].map(zi)
-    f['ni']  = f['Niveles'].map(ni)
-    f['ci']  = f['Cód. Cliente'].map(ci)
-    f['ai']  = f['Artículo'].map(ai)
-    f['ii']  = f['invkey'].map(ii)
-    f['impr']= f['Importe'].round().astype(int)
-    f['qr']  = f['Cantidad'].round(2)
+    f['vi']   = f['Vendedor'].map(vi)
+    f['zi']   = f['Nombre Zona'].map(zi)
+    f['ni']   = f['Niveles'].map(ni)
+    f['ci']   = f['Cód. Cliente'].map(ci)
+    f['ai']   = f['Artículo'].map(ai)
+    f['ii']   = f['invkey'].map(ii)
+    f['impr'] = f['Importe'].round().astype(int)
+    f['qr']   = f['Cantidad'].round(2)
 
     rows = {
-        'm':   f['m'].tolist(),
-        'v':   f['vi'].tolist(),
-        'z':   f['zi'].tolist(),
-        'n':   f['ni'].tolist(),
-        'c':   f['ci'].tolist(),
-        'a':   f['ai'].tolist(),
-        'inv': f['ii'].tolist(),
-        'imp': f['impr'].tolist(),
-        'q':   f['qr'].tolist(),
+        'm':   f['m'].tolist(),   'v': f['vi'].tolist(),
+        'z':   f['zi'].tolist(),  'n': f['ni'].tolist(),
+        'c':   f['ci'].tolist(),  'a': f['ai'].tolist(),
+        'inv': f['ii'].tolist(), 'imp': f['impr'].tolist(), 'q': f['qr'].tolist(),
     }
 
     def zone_parts(z):
@@ -182,19 +209,13 @@ def process(excel_path):
     months_since_arr = [int(months_since(last_all[a])) for a in arts]
     art_lvl_idx      = [ni.get(art_level.get(a), -1) for a in arts]
 
-    stale_total   = sum(1 for m in months_since_arr if m > 12)
-    stale_oport   = sum(1 for a,m in zip(arts,months_since_arr)
-                        if m>12 and art_level.get(a)=='Oportunidades')
+    stale_total = sum(1 for m in months_since_arr if m > 12)
+    stale_oport = sum(1 for a,m in zip(arts,months_since_arr)
+                      if m>12 and art_level.get(a) in ('Oportunidades',))
     print(f'  Artículos +1 año sin movimiento: {stale_total} (excluye {stale_oport} de Oportunidades)')
 
-    import calendar as cal
-    lastDayNum = ref.day
-    daysInCurrentMonth = cal.monthrange(ref.year, ref.month)[1]
-    currentMonth = ref.month
-
     # ── 2025 & 2026 level monthly sales ──
-    f25 = fAll[fAll['Fecha'].dt.year == 2025].copy()
-    f25['m'] = f25['Fecha'].dt.month
+    f25 = fAll[fAll['y'] == 2025].copy()
     lvlMonthly2025 = []
     for l in levels:
         row = [0]*12
@@ -271,11 +292,9 @@ def main():
         print(f'\nERROR: No se encontró {TEMPLATE}')
         sys.exit(1)
 
-    # 1. Process data
-    data = process(EXCEL_FILE)
+    data     = process(EXCEL_FILE)
     last_day = data['meta']['lastDay']
 
-    # 2. Logo
     logo_b64 = ''
     if os.path.exists(LOGO_FILE):
         print('  Procesando logo…')
@@ -283,14 +302,13 @@ def main():
     else:
         print('  AVISO: LogoDHVertical.jpg no encontrado, logo omitido.')
 
-    # 3. Inject into template
     print('  Generando index.html…')
     with open(TEMPLATE, encoding='utf-8') as fh:
         html = fh.read()
 
-    html = html.replace('__DATA_JSON__',  json.dumps(data, ensure_ascii=False, separators=(',',':')))
-    html = html.replace('__LOGO_B64__',   logo_b64)
-    html = html.replace('__LASTDAY__',    last_day)
+    html = html.replace('__DATA_JSON__', json.dumps(data, ensure_ascii=False, separators=(',',':')))
+    html = html.replace('__LOGO_B64__',  logo_b64)
+    html = html.replace('__LASTDAY__',   last_day)
 
     with open(OUTPUT, 'w', encoding='utf-8') as fh:
         fh.write(html)
@@ -299,6 +317,7 @@ def main():
     print(f'\n  ✓ index.html generado ({size_kb} KB)')
     print(f'  ✓ Datos al {last_day}')
     print(f'  ✓ {len(data["meta"]["clients"])} clientes | {len(data["meta"]["articles"])} artículos')
+    print(f'  ✓ {len(data["meta"]["levels"])} niveles: {", ".join(data["meta"]["levels"])}')
     print('=' * 55)
 
 if __name__ == '__main__':
