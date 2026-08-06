@@ -1920,7 +1920,7 @@ function openCotizador(){
       const gf       =monto*gfPct;
       const gfFin    =monto*gfFinPct;
       const resultado=monto-descuento-costo-comision-iibb-gf-gfFin;
-      rows.push({desc:it.desc||'Ítem',monto,cobrado,descuento,costo,comision,iibb,gf,gfFin,resultado,mb,sinCom});
+      rows.push({desc:it.desc||'Ítem',monto,cobrado,descuento,costo,comision,iibb,gf,gfFin,resultado,mb,vComRate});
     });
 
     const tot={monto:0,cobrado:0,descuento:0,costo:0,comision:0,iibb:0,gf:0,gfFin:0,resultado:0};
@@ -1955,7 +1955,7 @@ function openCotizador(){
           ['Precio lista (monto de venta)',tot.monto,null,'#01216A'],
           ['− Descuento '+RS.descPct+'%',-tot.descuento,null,'#B11425'],
           ['− Costo mercadería (MB '+((tot.monto>0?(tot.monto-tot.costo)/tot.monto*100:0).toFixed(1))+'%)',-tot.costo,null,'#B11425'],
-          ['− Comisión '+(sinCom?'(sin comisión)':RS.comPct+'%'),-tot.comision,null,sinCom?'#5b6b86':'#B11425'],
+          ['− Comisión '+(vComRate===0?'(sin comisión)':(vComRate*100).toFixed(1)+'%'),-tot.comision,null,vComRate===0?'#5b6b86':'#B11425'],
           cotizLinea===1?['− IIBB + CyI '+RS.iibbPct+'%',-tot.iibb,null,'#B11425']:null,
           gfPct>0?['− Gastos fijos '+(gfPct*100).toFixed(2)+'%',-tot.gf,null,'#B11425']:null,
           ['− Gastos financieros '+RS.gfFinPct+'%',-tot.gfFin,null,'#B11425'],
