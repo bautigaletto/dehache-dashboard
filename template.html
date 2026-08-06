@@ -253,6 +253,7 @@ select,input{font-family:inherit;font-size:14px}
     <button data-pg="zonas">Zonas</button>
     <button data-pg="clientes">Clientes</button>
     <button data-pg="articulos">Artículos</button>
+    <button data-pg="rentabilidad">Rentabilidad</button>
   </div>
   <div class="spacer"></div>
   <div class="note">Objetivo mensual<br><b style="color:#fff;font-family:Oswald">$300 M</b> · datos al __LASTDAY__</div>
@@ -275,6 +276,7 @@ select,input{font-family:inherit;font-size:14px}
   <button data-pg="vendedores"><svg class="bi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="7" r="3.2"/><path d="M3.5 20c0-3 2.7-5 5.5-5s5.5 2 5.5 5"/><circle cx="17.5" cy="8" r="2.6"/><path d="M16 14.5c2.4.2 4.5 2 4.5 5"/></svg>Vendedores</button>
   <button data-pg="zonas"><svg class="bi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s7-6.4 7-11a7 7 0 10-14 0c0 4.6 7 11 7 11z"/><circle cx="12" cy="10" r="2.6"/></svg>Zonas</button>
   <button data-pg="clientes"><svg class="bi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>Clientes</button>
+  <button data-pg="rentabilidad"><svg class="bi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>Rentabilidad</button>
   <button data-pg="articulos"><svg class="bi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Artículos</button>
 </nav>
 
@@ -386,10 +388,11 @@ function syncControls(){
   const isPrincipal=state.page==='principal';
   const isClientes=state.page==='clientes';
   const isArticulos=state.page==='articulos';
-  const hideAll=isPrincipal||isClientes||isArticulos;
+  const isRent=state.page==='rentabilidad';
+  const hideAll=isPrincipal||isClientes||isArticulos||isRent;
   document.querySelectorAll('#periods button').forEach(b=>
     b.classList.toggle('on',(b.dataset.p==='all'?'all':+b.dataset.p)===state.period));
-  document.getElementById('periods').style.display=(isClientes||isArticulos)?'none':'';
+  document.getElementById('periods').style.display=(isClientes||isArticulos||isRent)?'none':'';
   const sv=document.getElementById('selVendor');sv.value=state.vendor==null?'':state.vendor;
   const sz=document.getElementById('selZone');sz.value=state.zone==null?'':state.zone;
   const sl=document.getElementById('selLevel');sl.value=state.level==null?'':state.level;
@@ -397,7 +400,7 @@ function syncControls(){
   document.getElementById('selZoneWrap').style.display=hideAll?'none':'';
   document.getElementById('selVendorWrap').classList.toggle('active',state.vendor!=null);
   document.getElementById('selZoneWrap').classList.toggle('active',state.zone!=null);
-  document.getElementById('selLevelWrap').style.display=(isClientes||isArticulos)?'none':'';
+  document.getElementById('selLevelWrap').style.display=(isClientes||isArticulos||isRent)?'none':'';
   document.getElementById('selLevelWrap').classList.toggle('active',state.level!=null);
   document.querySelectorAll('#tabs button,#bnav button').forEach(b=>b.classList.toggle('on',b.dataset.pg===state.page));
   updateClear();
@@ -429,7 +432,9 @@ function render(){syncControls();
   else if(state.page==='vendedores')renderVendedores();
   else if(state.page==='zonas')renderZonas();
   else if(state.page==='clientes')renderClientes();
-  else renderArticulos();
+  else if(state.page==='articulos')renderArticulos();
+  else if(state.page==='rentabilidad')renderRentabilidad();
+  else renderRentabilidad();
   window.scrollTo({top:0,behavior:'instant'});
 }
 function filterNote(){
@@ -1410,6 +1415,588 @@ function renderArticulos(){
 }
 
 
+
+
+
+/* ---- RENTABILIDAD ---- */
+const NO_COMISION = ['Mostrador','Daniel Hernández'];  // sin comisión
+
+function fmtARS(n){
+  if(!n && n!==0) return '';
+  return Math.round(n).toLocaleString('es-AR');
+}
+function parseARS(s){
+  return parseInt((s+'').replace(/\./g,'').replace(/[^\d]/g,''),10)||0;
+}
+
+function renderRentabilidad(){
+  if(!window.rentState) window.rentState={
+    gastoFijoTotal:0, totalVentasRef:0, selMonth:null,
+    descPct:10, comPct:4, iibbPct:4.2, gfFinPct:3
+  };
+  const RS = window.rentState;
+
+  // Months with MB data
+  const mbMonths = new Set();
+  for(let i=0;i<R.imp.length;i++) if(R.mb[i]!=null) mbMonths.add(R.m[i]);
+  const mbMonthsArr = [...mbMonths].sort((a,b)=>a-b);
+  if(RS.selMonth==null||!mbMonths.has(RS.selMonth))
+    RS.selMonth = mbMonthsArr[mbMonthsArr.length-1]||null;
+
+  if(!mbMonthsArr.length){
+    app().innerHTML=`<div class="sec"><div class="hint" style="padding:32px;text-align:center">
+      <div style="font-size:32px;margin-bottom:12px">📊</div>
+      <b>Sin datos de margen bruto todavía</b><br>
+      <span style="color:var(--muted)">Disponibles a partir del primer mes con la columna "Margen bruto" completa en el Excel.</span>
+    </div></div>`;
+    return;
+  }
+
+  const fletesIdx = M.levels.indexOf('Fletes');
+
+  app().innerHTML=`
+  <div class="sec">
+    <div class="sec-h" style="flex-wrap:wrap;gap:8px">
+      <span class="bar" style="background:var(--ok)"></span><h2>Rentabilidad</h2>
+      <span class="sub">Margen neto por deducción · Datos al ${M.lastDay}</span>
+      <button onclick="openCotizador()" style="margin-left:auto;padding:8px 18px;border-radius:9px;background:#01216A;color:#fff;border:none;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px">
+        💰 Abrir cotizador
+      </button>
+    </div>
+
+    <!-- Selector de mes -->
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+      ${mbMonthsArr.map(m=>`<button data-rentm="${m}" style="padding:7px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;
+        border:1.5px solid ${m===RS.selMonth?'var(--navy)':'var(--line)'};
+        background:${m===RS.selMonth?'var(--navy)':'#fff'};color:${m===RS.selMonth?'#fff':'var(--muted)'}">
+        ${M.months[m-1]} 2026</button>`).join('')}
+    </div>
+
+    <!-- Parámetros -->
+    <div class="card" style="margin-bottom:14px">
+      <div class="sec-h" style="margin-bottom:14px"><span class="bar" style="background:var(--navy)"></span><h2>Parámetros</h2>
+        <span class="sub">Los cambios recalculan todo en tiempo real</span></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px">
+
+        <div style="background:var(--bg);border-radius:10px;padding:12px">
+          <div style="font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Tasas fijas</div>
+          ${paramRow('Descuento pago','descPct',RS.descPct,'% sobre monto de venta')}
+          ${paramRow('Comisión vendedor','comPct',RS.comPct,'% sobre cobrado (excluye Mostrador y D. Hernández)')}
+          ${paramRow('IIBB + Comercio e Ind.','iibbPct',RS.iibbPct,'% solo Línea 1')}
+          ${paramRow('Gastos financieros','gfFinPct',RS.gfFinPct,'% sobre monto de venta')}
+        </div>
+
+        <div style="background:var(--bg);border-radius:10px;padding:12px">
+          <div style="font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Gastos fijos del período</div>
+          <div style="margin-bottom:12px">
+            <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px">Total ventas del período ($)</label>
+            <input id="rent-ventas" type="text" inputmode="numeric" value="${fmtARS(RS.totalVentasRef)||''}"
+              placeholder="Ej: 20.000.000"
+              style="width:100%;padding:9px 11px;border:1.5px solid var(--line);border-radius:9px;font-size:14px;font-family:Oswald,sans-serif;font-weight:600;color:var(--navy)">
+            <div style="font-size:11px;color:var(--muted);margin-top:3px">Para calcular el % de gasto fijo sobre ventas</div>
+          </div>
+          <div style="margin-bottom:10px">
+            <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px">Total gasto fijo ($)</label>
+            <input id="rent-gasto" type="text" inputmode="numeric" value="${fmtARS(RS.gastoFijoTotal)||''}"
+              placeholder="Ej: 5.000.000"
+              style="width:100%;padding:9px 11px;border:1.5px solid var(--line);border-radius:9px;font-size:14px;font-family:Oswald,sans-serif;font-weight:600;color:var(--navy)">
+          </div>
+          <div style="padding:8px 10px;background:#fff;border-radius:8px;border:1px solid var(--line);display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:11.5px;color:var(--muted)">% GF aplicado a cada venta</span>
+            <span id="gf-pct-show" style="font-family:Oswald;font-size:16px;font-weight:700;color:var(--navy)">—</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Resultados (actualizados por recalcRent) -->
+    <div id="rent-outputs"></div>
+  </div>`;
+
+  // Wire month selector
+  app().querySelectorAll('[data-rentm]').forEach(btn=>{
+    btn.onclick=()=>{RS.selMonth=+btn.dataset.rentm; renderRentabilidad();};
+  });
+
+  // Wire param inputs (stable: don't re-render, just recalc)
+  ['descPct','comPct','iibbPct','gfFinPct'].forEach(k=>{
+    const el=document.getElementById('p-'+k);
+    if(el) el.addEventListener('input',e=>{RS[k]=parseFloat(e.target.value)||0; recalcRent();});
+  });
+
+  // Wire GF inputs with formatting (type=text, add dots while typing)
+  function wireMoneyInput(id, stateKey){
+    const el=document.getElementById(id);
+    if(!el) return;
+    el.addEventListener('input', function(){
+      const cursorPos = this.selectionStart;
+      const rawBefore = this.value.replace(/\./g,'');
+      const formatted = rawBefore.replace(/\D/g,'').replace(/\B(?=(\d{3})+(?!\d))/g,'.');
+      const addedDots = formatted.length - rawBefore.replace(/\D/g,'').length;
+      this.value = formatted;
+      // Restore cursor (dots added to the left shift position)
+      const newPos = cursorPos + addedDots;
+      this.setSelectionRange(newPos, newPos);
+      RS[stateKey] = parseARS(formatted);
+      recalcRent();
+    });
+  }
+  wireMoneyInput('rent-ventas','totalVentasRef');
+  wireMoneyInput('rent-gasto','gastoFijoTotal');
+
+  recalcRent();
+}
+
+function recalcRent(){
+  const RS = window.rentState;
+  if(!RS) return;
+  const out = document.getElementById('rent-outputs');
+  if(!out) return;
+
+  const descPct  = RS.descPct  /100;
+  const comPct   = RS.comPct   /100;
+  const iibbPct  = RS.iibbPct  /100;
+  const gfFinPct = RS.gfFinPct /100;
+  const gfPct    = RS.totalVentasRef>0 ? RS.gastoFijoTotal/RS.totalVentasRef : 0;
+
+  // Update GF% display
+  const gfEl = document.getElementById('gf-pct-show');
+  if(gfEl) gfEl.textContent = RS.totalVentasRef>0 ? (gfPct*100).toFixed(2)+'%' : '— (ingresá ventas)';
+
+  const fletesIdx = M.levels.indexOf('Fletes');
+
+  let totMonto=0,totDescuento=0,totCosto=0,totComision=0,totIIBB=0,totGF=0,totGFfin=0,totResultado=0;
+  const byVend=new Map(), byNivel=new Map(), detail=[];
+
+  for(let i=0;i<R.imp.length;i++){
+    if(R.m[i]!==RS.selMonth || R.mb[i]==null) continue;
+    if(R.n[i]===fletesIdx) continue;  // excluir Fletes
+
+    const monto    = R.imp[i];
+    const mb       = R.mb[i]/100;
+    const linea    = R.ln[i];
+    const cobrado  = monto*(1-descPct);
+    const descuento= monto*descPct;
+    const costo    = monto*(1-mb);
+    const vname    = M.vendors[R.v[i]]||'';
+    const comision = NO_COMISION.includes(vname) ? 0 : cobrado*comPct;
+    const iibb     = linea===1 ? monto*iibbPct : 0;
+    const gf       = monto*gfPct;
+    const gfFin    = monto*gfFinPct;
+    const resultado= monto-descuento-costo-comision-iibb-gf-gfFin;
+    const mneto    = monto>0?resultado/monto*100:0;
+
+    totMonto+=monto;totDescuento+=descuento;totCosto+=costo;
+    totComision+=comision;totIIBB+=iibb;totGF+=gf;totGFfin+=gfFin;totResultado+=resultado;
+
+    const nname=M.levels[R.n[i]]||'—';
+    if(!byVend.has(R.v[i])) byVend.set(R.v[i],{name:vname,monto:0,resultado:0,filas:0,com:0,iibb:0,costo:0,nocom:NO_COMISION.includes(vname)});
+    const bv=byVend.get(R.v[i]);
+    bv.monto+=monto;bv.resultado+=resultado;bv.filas++;bv.com+=comision;bv.iibb+=iibb;bv.costo+=costo;
+    if(!byNivel.has(R.n[i])) byNivel.set(R.n[i],{name:nname,monto:0,resultado:0,filas:0,mb_sum:0});
+    const bn=byNivel.get(R.n[i]);
+    bn.monto+=monto;bn.resultado+=resultado;bn.filas++;bn.mb_sum+=R.mb[i];
+
+    detail.push({monto,cobrado,costo,descuento,comision,iibb,gf,gfFin,resultado,mneto,mb:R.mb[i],linea,artIdx:R.a[i],vname,nname,nocom:NO_COMISION.includes(vname)});
+  }
+
+  const totMN = totMonto>0?totResultado/totMonto*100:0;
+  const mbAvg  = detail.length>0?detail.reduce((s,r)=>s+r.mb,0)/detail.length:0;
+
+  const cascade=[
+    {lab:'Ventas totales (excl. Fletes)',val:totMonto,       pct:100,                                            col:'var(--navy)',isBase:true},
+    {lab:'− Descuento '+RS.descPct+'%', val:-totDescuento,  pct:-totDescuento/totMonto*100,                    col:'var(--red)'},
+    {lab:'− Costo de mercadería',       val:-totCosto,       pct:-totCosto/totMonto*100,                        col:'var(--red)'},
+    {lab:'= Margen bruto $',            val:totMonto-totDescuento-totCosto, pct:(totMonto-totDescuento-totCosto)/totMonto*100, col:'var(--amber)',isSub:true},
+    {lab:'− Comisión vendedor '+RS.comPct+'%',val:-totComision,pct:-totComision/totMonto*100,                  col:'var(--red)'},
+    {lab:'− IIBB + CyI '+RS.iibbPct+'% (L1)',val:-totIIBB,  pct:-totIIBB/totMonto*100,                       col:'var(--red)'},
+    {lab:'− Gastos fijos '+(gfPct*100).toFixed(2)+'%',val:-totGF,pct:-totGF/totMonto*100,                     col:'var(--red)'},
+    {lab:'− Gastos financieros '+RS.gfFinPct+'%',val:-totGFfin,pct:-totGFfin/totMonto*100,                    col:'var(--red)'},
+    {lab:'= RESULTADO NETO',            val:totResultado,    pct:totMN,                                         col:totResultado>=0?'var(--ok)':'var(--red)',isTotal:true},
+  ];
+
+  const vendArr  = [...byVend.values()].sort((a,b)=>b.monto-a.monto);
+  const nivelArr = [...byNivel.values()].sort((a,b)=>b.monto-a.monto);
+
+  out.innerHTML=`
+    <!-- KPIs -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:12px;margin-bottom:14px">
+      ${kpiRent('Ventas del mes',fmtM(totMonto),detail.length+' líneas (sin Fletes)',false,'var(--navy)')}
+      ${kpiRent('MB promedio',mbAvg.toFixed(1)+'%','margen bruto sobre precio de venta',false,'var(--amber)')}
+      ${kpiRent('GF aplicado',(gfPct*100).toFixed(2)+'%',gfPct>0?'$'+fmtARS(totGF)+' en total':'Ingresá ventas y gasto fijo',false,'var(--muted)')}
+      ${kpiRent('Resultado neto',fmtM(totResultado),totMN.toFixed(2)+'% sobre ventas',totResultado<0,totResultado>=0?'var(--ok)':'var(--red)')}
+    </div>
+
+    <!-- Cascada -->
+    <div class="card" style="margin-bottom:14px">
+      <div class="sec-h" style="margin-bottom:12px"><span class="bar" style="background:var(--amber)"></span><h2>Desglose paso a paso</h2></div>
+      <div style="overflow-x:auto"><table class="tbl" style="min-width:480px">
+        <thead><tr><th>Concepto</th><th class="r">Monto ($)</th><th class="r">% sobre ventas</th><th>Barra</th></tr></thead>
+        <tbody>${cascade.map(c=>{
+          if(!isFinite(c.pct)) return '';
+          const bw=Math.min(Math.abs(c.pct),100);
+          const bc=c.isBase?'var(--navy)':c.isSub?'var(--amber)':c.isTotal?(totResultado>=0?'var(--ok)':'var(--red)'):'var(--red)';
+          const bg=c.isBase?'#f4f7ff':c.isSub?'#fff8f0':c.isTotal?(totResultado>=0?'#f0faf5':'#fff8f8'):'';
+          const fw=c.isBase||c.isSub||c.isTotal?'font-weight:700':'';
+          return `<tr style="background:${bg}">
+            <td style="${fw}">${c.lab}</td>
+            <td class="r" style="font-family:Oswald;font-weight:600;color:${c.col}">${c.val>=0?'':'−'}$${fmtARS(Math.abs(c.val))}</td>
+            <td class="r" style="color:${c.col};font-family:Oswald;font-weight:600">${c.pct>=0?'+':''}${c.pct.toFixed(2)}%</td>
+            <td style="width:28%;padding-right:12px"><div style="background:#eef3ff;border-radius:4px;height:10px">
+              <div style="height:10px;border-radius:4px;background:${bc};width:${bw}%"></div></div></td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div>
+    </div>
+
+    <!-- Por vendedor -->
+    <div class="card" style="margin-bottom:14px">
+      <div class="sec-h" style="margin-bottom:12px"><span class="bar" style="background:var(--navy2)"></span><h2>Por vendedor</h2></div>
+      <table class="tbl">
+        <thead><tr><th>Vendedor</th><th class="r">Ventas</th><th class="r">MB prom.</th><th class="r">Comisión</th><th class="r">IIBB</th><th class="r">Resultado</th><th class="r">Margen neto</th></tr></thead>
+        <tbody>${vendArr.map(v=>{
+          const mn=v.monto>0?v.resultado/v.monto*100:0;
+          const mbv=v.monto>0?(v.monto-v.costo)/v.monto*100:0;
+          return `<tr>
+            <td><b>${v.name}</b>${v.nocom?' <span style="font-size:10px;background:#f0faf5;color:var(--ok);padding:2px 5px;border-radius:4px">sin comisión</span>':''}<br>
+              <span style="font-size:11px;color:var(--muted)">${v.filas} líneas</span></td>
+            <td class="r">${fmtM(v.monto)}</td>
+            <td class="r" style="color:var(--amber)">${mbv.toFixed(1)}%</td>
+            <td class="r" style="color:var(--muted)">${v.nocom?'—':fmtM(v.com)}</td>
+            <td class="r" style="color:var(--muted)">${fmtM(v.iibb)}</td>
+            <td class="r" style="color:${v.resultado>=0?'var(--ok)':'var(--red)'};font-weight:700">${fmtM(v.resultado)}</td>
+            <td class="r" style="color:${mn>=0?'var(--ok)':'var(--red)'};font-weight:700">${mn.toFixed(2)}%</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+    </div>
+
+    <!-- Por nivel -->
+    <div class="card" style="margin-bottom:14px">
+      <div class="sec-h" style="margin-bottom:12px"><span class="bar" style="background:var(--navy2)"></span><h2>Por nivel</h2></div>
+      <table class="tbl">
+        <thead><tr><th>Nivel</th><th class="r">Ventas</th><th class="r">MB prom.</th><th class="r">Resultado</th><th class="r">Margen neto</th><th class="r">Líneas</th></tr></thead>
+        <tbody>${nivelArr.map(n=>{
+          const mn=n.monto>0?n.resultado/n.monto*100:0;
+          return `<tr>
+            <td><b>${n.name}</b></td>
+            <td class="r">${fmtM(n.monto)}</td>
+            <td class="r" style="color:var(--amber)">${(n.mb_sum/n.filas).toFixed(1)}%</td>
+            <td class="r" style="color:${n.resultado>=0?'var(--ok)':'var(--red)'};font-weight:700">${fmtM(n.resultado)}</td>
+            <td class="r" style="color:${mn>=0?'var(--ok)':'var(--red)'};font-weight:700">${mn.toFixed(2)}%</td>
+            <td class="r" style="color:var(--muted)">${n.filas}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+    </div>
+
+    <!-- Detalle -->
+    <div class="card">
+      <div class="sec-h" style="margin-bottom:10px"><span class="bar" style="background:var(--muted)"></span>
+        <h2>Detalle por transacción</h2><span class="sub">Top 50 por monto</span></div>
+      <div style="overflow-x:auto"><table class="tbl" style="min-width:720px;font-size:12px">
+        <thead><tr><th>Artículo</th><th>Nivel</th><th>Vendedor</th><th>L</th>
+          <th class="r">Monto</th><th class="r">MB%</th><th class="r">Cobrado</th>
+          <th class="r">Costo</th><th class="r">Comis.</th><th class="r">IIBB</th>
+          <th class="r">GF</th><th class="r">GF fin.</th>
+          <th class="r" style="color:var(--ok)">Resultado</th><th class="r">%neto</th>
+        </tr></thead>
+        <tbody>${detail.sort((a,b)=>b.monto-a.monto).slice(0,50).map(r=>`<tr>
+          <td style="font-size:11px;font-weight:600;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${M.articles[r.artIdx]}">${M.articles[r.artIdx]}</td>
+          <td style="font-size:11px;color:var(--muted)">${r.nname}</td>
+          <td style="font-size:11px;color:var(--muted)">${r.vname.split(' ')[0]}</td>
+          <td style="font-size:11px;text-align:center">${r.linea}</td>
+          <td class="r">${fmtM(r.monto)}</td>
+          <td class="r" style="color:var(--amber)">${r.mb.toFixed(1)}%</td>
+          <td class="r" style="color:var(--muted)">${fmtM(r.cobrado)}</td>
+          <td class="r" style="color:var(--red)">${fmtM(r.costo)}</td>
+          <td class="r" style="color:var(--muted)">${r.nocom?'—':fmtM(r.comision)}</td>
+          <td class="r" style="color:var(--muted)">${r.linea===1?fmtM(r.iibb):'—'}</td>
+          <td class="r" style="color:var(--muted)">${fmtM(r.gf)}</td>
+          <td class="r" style="color:var(--muted)">${fmtM(r.gfFin)}</td>
+          <td class="r" style="color:${r.resultado>=0?'var(--ok)':'var(--red)'};font-weight:700">${fmtM(r.resultado)}</td>
+          <td class="r" style="color:${r.mneto>=0?'var(--ok)':'var(--red)'};font-weight:700">${r.mneto.toFixed(1)}%</td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+    </div>`;
+}
+
+function paramRow(label, key, unit, val, hint){
+  return `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line2)">
+    <div>
+      <div style="font-size:12px;font-weight:600;color:var(--ink)">${label}</div>
+      <div style="font-size:10.5px;color:var(--muted)">${hint}</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:4px">
+      <input id="p-${key}" type="number" min="0" max="100" step="0.1" value="${val}"
+        style="width:60px;padding:5px 6px;border:1px solid var(--line);border-radius:7px;font-size:13px;font-family:Oswald,sans-serif;font-weight:600;color:var(--navy);text-align:right">
+      <span style="font-size:12px;color:var(--muted)">${unit}</span>
+    </div>
+  </div>`;
+}
+
+function kpiRent(lab,val,sub,red,col){
+  return `<div style="background:#fff;border-radius:11px;padding:14px 15px;border-left:4px solid ${col};box-shadow:0 1px 6px rgba(1,33,106,.06)">
+    <div style="font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">${lab}</div>
+    <div style="font-family:Oswald,sans-serif;font-size:22px;font-weight:700;color:${col};line-height:1.1">${val}</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:3px">${sub}</div>
+  </div>`;
+}
+
+
+/* ---- COTIZADOR ---- */
+function openCotizador(){
+  if(!window.rentState) window.rentState={gastoFijoTotal:0,totalVentasRef:0,selMonth:null,descPct:10,comPct:4,iibbPct:4.2,gfFinPct:3};
+  const RS=window.rentState;
+
+  // Modal overlay
+  let overlay=document.getElementById('cotizadorOverlay');
+  if(overlay) overlay.remove();
+  overlay=document.createElement('div');
+  overlay.id='cotizadorOverlay';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(1,33,106,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  overlay.innerHTML=`
+  <div style="background:#fff;border-radius:16px;width:100%;max-width:640px;max-height:92vh;overflow-y:auto;box-shadow:0 8px 48px rgba(1,33,106,.25)">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 20px 12px;border-bottom:1px solid #dde4f5;position:sticky;top:0;background:#fff;z-index:1;border-radius:16px 16px 0 0">
+      <div>
+        <div style="font-family:Oswald,sans-serif;font-size:18px;font-weight:700;color:#01216A">💰 Cotizador</div>
+        <div style="font-size:12px;color:#5b6b86;margin-top:2px">Calculá el margen neto de una venta antes de cerrarla</div>
+      </div>
+      <button id="closeCotiz" style="background:#f4f7ff;border:none;border-radius:50%;width:32px;height:32px;font-size:18px;cursor:pointer;color:#5b6b86;line-height:32px;text-align:center">✕</button>
+    </div>
+
+    <div style="padding:18px 20px">
+
+      <!-- Items de la cotización -->
+      <div style="font-size:11px;font-weight:700;color:#5b6b86;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Ítems de la venta</div>
+      <div id="cotiz-items"></div>
+      <button id="cotiz-add-item" style="margin-top:8px;padding:8px 16px;border-radius:8px;border:1.5px dashed #c9d6f5;background:#f4f7ff;color:#01216A;font-size:13px;font-weight:600;cursor:pointer;width:100%">+ Agregar ítem</button>
+
+      <div style="height:1px;background:#dde4f5;margin:16px 0"></div>
+
+      <!-- Parámetros de la cotización -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+        <div>
+          <label style="font-size:11px;font-weight:700;color:#5b6b86;text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:5px">Vendedor</label>
+          <select id="cotiz-vend" style="width:100%;padding:9px 10px;border:1.5px solid #dde4f5;border-radius:9px;font-size:13px;font-weight:600;color:#0f182b">
+            ${M.vendors.map((v,i)=>`<option value="${i}">${v}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;color:#5b6b86;text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:5px">Línea de venta</label>
+          <div style="display:flex;gap:8px">
+            <button class="cotiz-linea-btn" data-l="1" style="flex:1;padding:9px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;border:1.5px solid #01216A;background:#01216A;color:#fff">Línea 1<br><span style="font-size:10px;font-weight:400">Facturado</span></button>
+            <button class="cotiz-linea-btn" data-l="2" style="flex:1;padding:9px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;border:1.5px solid #dde4f5;background:#fff;color:#5b6b86">Línea 2<br><span style="font-size:10px;font-weight:400">Sin IIBB</span></button>
+          </div>
+        </div>
+      </div>
+
+      <div style="height:1px;background:#dde4f5;margin-bottom:14px"></div>
+
+      <!-- Resultado -->
+      <div id="cotiz-result"></div>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+
+  // State
+  let cotizLinea=1;
+  let cotizItems=[{desc:'',monto:'',mb:'',fmt:''}]; // desc, monto(raw), mb(%), fmt(display)
+
+  function getVendName(){
+    const sel=document.getElementById('cotiz-vend');
+    return sel?M.vendors[+sel.value]:'';
+  }
+
+  function fmtARSc(s){
+    const d=(s+'').replace(/\D/g,'');
+    return d.replace(/\B(?=(\d{3})+(?!\d))/g,'.');
+  }
+  function parseARSc(s){ return parseInt((s+'').replace(/\./g,''),10)||0; }
+
+  function renderItems(){
+    const el=document.getElementById('cotiz-items');
+    if(!el) return;
+    el.innerHTML=cotizItems.map((it,i)=>`
+    <div style="display:grid;grid-template-columns:1fr 130px 80px ${cotizItems.length>1?'28px':'0px'};gap:8px;margin-bottom:8px;align-items:start">
+      <div>
+        ${i===0?'<label style="font-size:10.5px;font-weight:600;color:#5b6b86;display:block;margin-bottom:3px">Descripción</label>':''}
+        <input data-ifield="desc" data-idx="${i}" type="text" value="${it.desc}" placeholder="Artículo o descripción"
+          style="width:100%;padding:9px 10px;border:1.5px solid #dde4f5;border-radius:9px;font-size:13px;color:#0f182b">
+      </div>
+      <div>
+        ${i===0?'<label style="font-size:10.5px;font-weight:600;color:#5b6b86;display:block;margin-bottom:3px">Monto lista ($)</label>':''}
+        <input data-ifield="fmt" data-idx="${i}" type="text" inputmode="numeric" value="${it.fmt}" placeholder="0"
+          style="width:100%;padding:9px 10px;border:1.5px solid #dde4f5;border-radius:9px;font-size:13px;font-family:Oswald,sans-serif;font-weight:600;color:#01216A;text-align:right">
+      </div>
+      <div>
+        ${i===0?'<label style="font-size:10.5px;font-weight:600;color:#5b6b86;display:block;margin-bottom:3px">MB %</label>':''}
+        <input data-ifield="mb" data-idx="${i}" type="number" min="-100" max="100" step="0.1" value="${it.mb}" placeholder="0"
+          style="width:100%;padding:9px 10px;border:1.5px solid #dde4f5;border-radius:9px;font-size:13px;font-family:Oswald,sans-serif;font-weight:600;color:#01216A;text-align:right">
+      </div>
+      ${cotizItems.length>1?`<div style="${i===0?'margin-top:22px':''}">
+        <button data-del="${i}" style="width:28px;height:38px;border-radius:7px;border:1px solid #f6c6cc;background:#fff8f8;color:#B11425;font-size:16px;cursor:pointer">✕</button>
+      </div>`:'<div></div>'}
+    </div>`).join('');
+
+    // Wire inputs
+    el.querySelectorAll('[data-ifield]').forEach(inp=>{
+      const idx=+inp.dataset.idx, field=inp.dataset.ifield;
+      inp.addEventListener('input',e=>{
+        if(field==='fmt'){
+          const raw=(e.target.value+'').replace(/\D/g,'');
+          const formatted=raw.replace(/\B(?=(\d{3})+(?!\d))/g,'.');
+          const cur=e.target.selectionStart;
+          const before=(e.target.value.slice(0,cur).replace(/\./g,'')).length;
+          e.target.value=formatted;
+          // restore cursor
+          let pos=0,count=0;
+          for(let i=0;i<formatted.length;i++){ if(formatted[i]!='.')count++; if(count===before){pos=i+1;break;} }
+          e.target.setSelectionRange(pos,pos);
+          cotizItems[idx].fmt=formatted;
+          cotizItems[idx].monto=parseARSc(formatted);
+        } else {
+          cotizItems[idx][field]=e.target.value;
+        }
+        calcCotiz();
+      });
+    });
+    el.querySelectorAll('[data-del]').forEach(btn=>{
+      btn.addEventListener('click',()=>{cotizItems.splice(+btn.dataset.del,1);renderItems();calcCotiz();});
+    });
+  }
+
+  function calcCotiz(){
+    const descPct =RS.descPct /100;
+    const comPct  =RS.comPct  /100;
+    const iibbPct =RS.iibbPct /100;
+    const gfFinPct=RS.gfFinPct/100;
+    const gfPct   =RS.totalVentasRef>0?RS.gastoFijoTotal/RS.totalVentasRef:0;
+    const vendName=getVendName();
+    const sinCom  =['Mostrador','Daniel Hernández'].includes(vendName);
+
+    let rows=[];
+    cotizItems.forEach(it=>{
+      const monto=it.monto||0; if(!monto) return;
+      const mb  =parseFloat(it.mb)||0;
+      const cobrado  =monto*(1-descPct);
+      const descuento=monto*descPct;
+      const costo    =monto*(1-mb/100);
+      const comision =sinCom?0:cobrado*comPct;
+      const iibb     =cotizLinea===1?monto*iibbPct:0;
+      const gf       =monto*gfPct;
+      const gfFin    =monto*gfFinPct;
+      const resultado=monto-descuento-costo-comision-iibb-gf-gfFin;
+      rows.push({desc:it.desc||'Ítem',monto,cobrado,descuento,costo,comision,iibb,gf,gfFin,resultado,mb,sinCom});
+    });
+
+    const tot={monto:0,cobrado:0,descuento:0,costo:0,comision:0,iibb:0,gf:0,gfFin:0,resultado:0};
+    rows.forEach(r=>{Object.keys(tot).forEach(k=>tot[k]+=r[k]);});
+    const mn=tot.monto>0?tot.resultado/tot.monto*100:0;
+
+    const el=document.getElementById('cotiz-result');
+    if(!el) return;
+    if(!rows.length){el.innerHTML='<div style="text-align:center;color:#5b6b86;padding:16px;font-size:13px">Ingresá al menos un ítem con monto y MB%</div>';return;}
+
+    const colRes=tot.resultado>=0?'#1f8a5b':'#B11425';
+    const bgRes =tot.resultado>=0?'#f0faf5':'#fff8f8';
+    const bdRes =tot.resultado>=0?'#c3e6d6':'#f6c6cc';
+
+    el.innerHTML=`
+    <!-- Resumen total -->
+    <div style="border-radius:12px;padding:16px;background:${bgRes};border:1.5px solid ${bdRes};margin-bottom:14px">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:12px">
+        <div><div style="font-size:10.5px;color:#5b6b86;font-weight:600;margin-bottom:3px">Precio lista</div>
+          <div style="font-family:Oswald,sans-serif;font-size:18px;font-weight:700;color:#0f182b">$${fmtARS(tot.monto)}</div></div>
+        <div><div style="font-size:10.5px;color:#5b6b86;font-weight:600;margin-bottom:3px">Lo cobra el cliente</div>
+          <div style="font-family:Oswald,sans-serif;font-size:18px;font-weight:700;color:#01216A">$${fmtARS(tot.cobrado)}</div>
+          <div style="font-size:10.5px;color:#5b6b86">con ${RS.descPct}% dto.</div></div>
+        <div><div style="font-size:10.5px;color:#5b6b86;font-weight:600;margin-bottom:3px">Resultado neto</div>
+          <div style="font-family:Oswald,sans-serif;font-size:22px;font-weight:700;color:${colRes}">$${fmtARS(tot.resultado)}</div>
+          <div style="font-size:11px;font-weight:700;color:${colRes}">${mn.toFixed(2)}% sobre lista</div></div>
+      </div>
+
+      <!-- Cascada compacta -->
+      <div style="background:#fff;border-radius:9px;overflow:hidden;border:1px solid ${bdRes}">
+        ${[
+          ['Precio lista (monto de venta)',tot.monto,null,'#01216A'],
+          ['− Descuento '+RS.descPct+'%',-tot.descuento,null,'#B11425'],
+          ['− Costo mercadería (MB '+((tot.monto>0?(tot.monto-tot.costo)/tot.monto*100:0).toFixed(1))+'%)',-tot.costo,null,'#B11425'],
+          ['− Comisión '+(sinCom?'(sin comisión)':RS.comPct+'%'),-tot.comision,null,sinCom?'#5b6b86':'#B11425'],
+          cotizLinea===1?['− IIBB + CyI '+RS.iibbPct+'%',-tot.iibb,null,'#B11425']:null,
+          gfPct>0?['− Gastos fijos '+(gfPct*100).toFixed(2)+'%',-tot.gf,null,'#B11425']:null,
+          ['− Gastos financieros '+RS.gfFinPct+'%',-tot.gfFin,null,'#B11425'],
+          ['= RESULTADO NETO',tot.resultado,mn,colRes],
+        ].filter(Boolean).map(([lab,val,pct,col],i,arr)=>{
+          const isLast=i===arr.length-1;
+          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 12px;
+            border-bottom:${isLast?'none':'1px solid #f0f4fa'};
+            background:${isLast?bgRes:'#fff'};
+            font-weight:${isLast?700:400}">
+            <span style="font-size:12.5px;color:${isLast?col:'#0f182b'}">${lab}</span>
+            <span style="font-family:Oswald,sans-serif;font-size:13px;font-weight:700;color:${col}">
+              ${val<0?'−':''}$${fmtARS(Math.abs(val))}
+              ${pct!=null?`<span style="font-size:11px;font-weight:600"> (${pct.toFixed(2)}%)</span>`:''}
+            </span>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+
+    ${rows.length>1?`
+    <!-- Detalle por ítem -->
+    <div style="font-size:11px;font-weight:700;color:#5b6b86;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Detalle por ítem</div>
+    <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="border-bottom:2px solid #01216A">
+        <th style="text-align:left;padding:6px 8px;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:#5b6b86">Ítem</th>
+        <th style="text-align:right;padding:6px 8px;font-size:10.5px;color:#5b6b86">Lista</th>
+        <th style="text-align:right;padding:6px 8px;font-size:10.5px;color:#5b6b86">Cobrado</th>
+        <th style="text-align:right;padding:6px 8px;font-size:10.5px;color:#5b6b86">MB%</th>
+        <th style="text-align:right;padding:6px 8px;font-size:10.5px;color:#5b6b86">Resultado</th>
+        <th style="text-align:right;padding:6px 8px;font-size:10.5px;color:#5b6b86">%neto</th>
+      </tr></thead>
+      <tbody>${rows.map((r,i)=>{
+        const mn=r.monto>0?r.resultado/r.monto*100:0;
+        return `<tr style="border-bottom:1px solid #f0f4fa;background:${i%2?'#f9fafd':'#fff'}">
+          <td style="padding:7px 8px;font-weight:600">${r.desc}</td>
+          <td style="padding:7px 8px;text-align:right;font-family:Oswald,sans-serif">$${fmtARS(r.monto)}</td>
+          <td style="padding:7px 8px;text-align:right;font-family:Oswald,sans-serif;color:#01216A">$${fmtARS(r.cobrado)}</td>
+          <td style="padding:7px 8px;text-align:right;font-family:Oswald,sans-serif;color:#E0982B">${r.mb.toFixed(1)}%</td>
+          <td style="padding:7px 8px;text-align:right;font-family:Oswald,sans-serif;font-weight:700;color:${r.resultado>=0?'#1f8a5b':'#B11425'}">$${fmtARS(r.resultado)}</td>
+          <td style="padding:7px 8px;text-align:right;font-weight:700;color:${mn>=0?'#1f8a5b':'#B11425'}">${mn.toFixed(1)}%</td>
+        </tr>`;}).join('')}
+      </tbody>
+    </table></div>`:''}`;
+  }
+
+  // Wire
+  document.getElementById('closeCotiz').onclick=()=>overlay.remove();
+  overlay.addEventListener('click',e=>{ if(e.target===overlay) overlay.remove(); });
+
+  document.getElementById('cotiz-add-item').onclick=()=>{
+    cotizItems.push({desc:'',monto:0,mb:'',fmt:''});
+    renderItems(); calcCotiz();
+  };
+
+  overlay.addEventListener('click',e=>{
+    if(e.target.classList.contains('cotiz-linea-btn')){
+      cotizLinea=+e.target.dataset.l;
+      overlay.querySelectorAll('.cotiz-linea-btn').forEach(b=>{
+        const active=+b.dataset.l===cotizLinea;
+        b.style.background=active?'#01216A':'#fff';
+        b.style.color=active?'#fff':'#5b6b86';
+        b.style.borderColor=active?'#01216A':'#dde4f5';
+      });
+      calcCotiz();
+    }
+  });
+  overlay.addEventListener('change',e=>{
+    if(e.target.id==='cotiz-vend') calcCotiz();
+  });
+
+  renderItems();
+  calcCotiz();
+}
 
 /* ============ INIT ============ */
 buildControls();render();

@@ -189,11 +189,24 @@ def process(excel_path):
     f['impr'] = f['Importe'].round().astype(int)
     f['qr']   = f['Cantidad'].round(2)
 
+    # Margen bruto & Linea (available from Aug 2026 onwards)
+    if 'Margen bruto' in f.columns:
+        f['mb_r'] = f['Margen bruto'].where(f['Margen bruto'].notna(), other=None)
+        mb_list = [round(v, 2) if v is not None else None for v in f['mb_r'].tolist()]
+    else:
+        mb_list = [None] * len(f)
+
+    if 'Linea' in f.columns:
+        ln_list = [int(v) if pd.notna(v) else 0 for v in f['Linea'].tolist()]
+    else:
+        ln_list = [0] * len(f)
+
     rows = {
         'm':   f['m'].tolist(),   'v': f['vi'].tolist(),
         'z':   f['zi'].tolist(),  'n': f['ni'].tolist(),
         'c':   f['ci'].tolist(),  'a': f['ai'].tolist(),
         'inv': f['ii'].tolist(), 'imp': f['impr'].tolist(), 'q': f['qr'].tolist(),
+        'mb':  mb_list,           'ln': ln_list,
     }
 
     def zone_parts(z):
