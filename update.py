@@ -228,12 +228,18 @@ def process(excel_path):
     print(f'  Artículos +1 año sin movimiento: {stale_total} (excluye {stale_oport} de Oportunidades)')
 
     # ── 2025 & 2026 level monthly sales ──
+    # 2025 is optional — returns zeros if the Excel only contains 2026 data
     f25 = fAll[fAll['y'] == 2025].copy()
+    has2025 = len(f25) > 0
+    if has2025:
+        f25['m'] = f25['Fecha'].dt.month
+
     lvlMonthly2025 = []
     for l in levels:
         row = [0]*12
-        for m, g in f25[f25['Niveles']==l].groupby('m'):
-            row[m-1] = int(g['Importe'].sum().round())
+        if has2025:
+            for m, g in f25[f25['Niveles']==l].groupby('m'):
+                row[m-1] = int(g['Importe'].sum().round())
         lvlMonthly2025.append(row)
 
     lvlMonthly2026 = []
@@ -245,8 +251,9 @@ def process(excel_path):
         lvlMonthly2026.append(row)
 
     totalMonthly2025 = [0]*12
-    for m, g in f25.groupby('m'):
-        totalMonthly2025[m-1] = int(g['Importe'].sum().round())
+    if has2025:
+        for m, g in f25.groupby('m'):
+            totalMonthly2025[m-1] = int(g['Importe'].sum().round())
 
     # ── Article monthly sales+qty 2026 ──
     art_grp = f.groupby('ai')
