@@ -1575,7 +1575,7 @@ function recalcRent(){
 
   const fletesIdx = M.levels.indexOf('Fletes');
 
-  let totMonto=0,totDescuento=0,totCosto=0,totComision=0,totIIBB=0,totGF=0,totGFfin=0,totResultado=0;
+  let totMonto=0,totCobrado=0,totDescuento=0,totCosto=0,totComision=0,totIIBB=0,totGF=0,totGFfin=0,totResultado=0;
   const byVend=new Map(), byNivel=new Map(), byZona=new Map(), byCliente=new Map(), detail=[];
 
   for(let i=0;i<R.imp.length;i++){
@@ -1598,7 +1598,7 @@ function recalcRent(){
     const resultado= monto-descuento-costo-comision-iibb-gf-gfFin;
     const mneto    = monto>0?resultado/monto*100:0;
 
-    totMonto+=monto;totDescuento+=descuento;totCosto+=costo;
+    totMonto+=monto;totCobrado+=cobrado;totDescuento+=descuento;totCosto+=costo;
     totComision+=comision;totIIBB+=iibb;totGF+=gf;totGFfin+=gfFin;totResultado+=resultado;
 
     const nname=M.levels[R.n[i]]||'—';
