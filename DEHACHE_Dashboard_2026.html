@@ -1594,7 +1594,7 @@ function recalcRent(){
     const comision = cobrado * (comRate/100);
     const iibb     = linea===1 ? monto*iibbPct : 0;
     const gf       = monto*gfPct;
-    const gfFin    = monto*gfFinPct;
+    const gfFin    = cobrado*gfFinPct;
     const resultado= monto-descuento-costo-comision-iibb-gf-gfFin;
     const mneto    = monto>0?resultado/monto*100:0;
 
@@ -1920,7 +1920,7 @@ function openCotizador(){
       const comision =cobrado*vComRate;
       const iibb     =cotizLinea===1?monto*iibbPct:0;
       const gf       =monto*gfPct;
-      const gfFin    =monto*gfFinPct;
+      const gfFin    =cobrado*gfFinPct;
       const resultado=monto-descuento-costo-comision-iibb-gf-gfFin;
       rows.push({desc:it.desc||'Ítem',monto,cobrado,descuento,costo,comision,iibb,gf,gfFin,resultado,mb,vComRate});
     });
