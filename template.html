@@ -1618,19 +1618,21 @@ function recalcRent(){
     detail.push({monto,cobrado,costo,descuento,comision,iibb,gf,gfFin,resultado,mneto,mb:R.mb[i],linea,artIdx:R.a[i],vname,nname,comRate});
   }
 
-  const totMN = totMonto>0?totResultado/totMonto*100:0;
+  const totMN = totCobrado>0?totResultado/totCobrado*100:0;
   const mbAvg  = detail.length>0?detail.reduce((s,r)=>s+r.mb,0)/detail.length:0;
+  const totMbBruto = totMonto-totDescuento-totCosto; // ganancia bruta en $
 
   const cascade=[
-    {lab:'Ventas totales (excl. Fletes)',val:totMonto,       pct:100,                                            col:'var(--navy)',isBase:true},
-    {lab:'− Descuento '+RS.descPct+'%', val:-totDescuento,  pct:-totDescuento/totMonto*100,                    col:'var(--red)'},
-    {lab:'− Costo de mercadería',       val:-totCosto,       pct:-totCosto/totMonto*100,                        col:'var(--red)'},
-    {lab:'= Margen bruto $',            val:totMonto-totDescuento-totCosto, pct:(totMonto-totDescuento-totCosto)/totMonto*100, col:'var(--amber)',isSub:true},
-    {lab:'− Comisión vendedor '+RS.comPct+'%',val:-totComision,pct:-totComision/totMonto*100,                  col:'var(--red)'},
-    {lab:'− IIBB + CyI '+RS.iibbPct+'% (L1)',val:-totIIBB,  pct:-totIIBB/totMonto*100,                       col:'var(--red)'},
-    {lab:'− Gastos fijos '+(gfPct*100).toFixed(2)+'%',val:-totGF,pct:-totGF/totMonto*100,                     col:'var(--red)'},
-    {lab:'− Gastos financieros '+RS.gfFinPct+'%',val:-totGFfin,pct:-totGFfin/totMonto*100,                    col:'var(--red)'},
-    {lab:'= RESULTADO NETO',            val:totResultado,    pct:totMN,                                         col:totResultado>=0?'var(--ok)':'var(--red)',isTotal:true},
+    {lab:'Ventas (precio lista)',         val:totMonto,      pct:100,                                col:'var(--navy)',isBase:true},
+    {lab:'− Descuento '+RS.descPct+'%',  val:-totDescuento, pct:-RS.descPct,                        col:'var(--red)'},
+    {lab:'= Precio cobrado al cliente',  val:totCobrado,    pct:totCobrado/totMonto*100,            col:'var(--navy2)',isSub:true},
+    {lab:'− Costo de mercadería',        val:-totCosto,     pct:-totCosto/totCobrado*100,           col:'var(--red)'},
+    {lab:'= Margen bruto $',             val:totMbBruto,    pct:totMbBruto/totCobrado*100,          col:'var(--amber)',isSub:true},
+    {lab:'− Comisión vendedor',          val:-totComision,  pct:-totComision/totCobrado*100,        col:'var(--red)'},
+    {lab:'− IIBB + CyI '+RS.iibbPct+'% (L1)',val:-totIIBB, pct:-totIIBB/totCobrado*100,            col:'var(--red)'},
+    {lab:'− Gastos fijos '+(gfPct*100).toFixed(2)+'%',val:-totGF,pct:-totGF/totCobrado*100,        col:'var(--red)'},
+    {lab:'− Gastos financieros '+RS.gfFinPct+'%',val:-totGFfin,pct:-totGFfin/totCobrado*100,       col:'var(--red)'},
+    {lab:'= RESULTADO NETO',             val:totResultado,  pct:totMN,                              col:totResultado>=0?'var(--ok)':'var(--red)',isTotal:true},
   ];
 
   const vendArr  = [...byVend.values()].sort((a,b)=>b.monto-a.monto);
@@ -1642,14 +1644,14 @@ function recalcRent(){
       ${kpiRent('Ventas del mes',fmtM(totMonto),detail.length+' líneas (sin Fletes)',false,'var(--navy)')}
       ${kpiRent('MB promedio',mbAvg.toFixed(1)+'%','margen bruto sobre precio de venta',false,'var(--amber)')}
       ${kpiRent('GF aplicado',(gfPct*100).toFixed(2)+'%',gfPct>0?'$'+fmtARS(totGF)+' en total':'Ingresá ventas y gasto fijo',false,'var(--muted)')}
-      ${kpiRent('Resultado neto',fmtM(totResultado),totMN.toFixed(2)+'% sobre ventas',totResultado<0,totResultado>=0?'var(--ok)':'var(--red)')}
+      ${kpiRent('Resultado neto',fmtM(totResultado),totMN.toFixed(2)+'% sobre cobrado',totResultado<0,totResultado>=0?'var(--ok)':'var(--red)')}
     </div>
 
     <!-- Cascada -->
     <div class="card" style="margin-bottom:14px">
       <div class="sec-h" style="margin-bottom:12px"><span class="bar" style="background:var(--amber)"></span><h2>Desglose paso a paso</h2></div>
       <div style="overflow-x:auto"><table class="tbl" style="min-width:480px">
-        <thead><tr><th>Concepto</th><th class="r">Monto ($)</th><th class="r">% sobre ventas</th><th>Barra</th></tr></thead>
+        <thead><tr><th>Concepto</th><th class="r">Monto ($)</th><th class="r">% (sobre cobrado)</th><th>Barra</th></tr></thead>
         <tbody>${cascade.map(c=>{
           if(!isFinite(c.pct)) return '';
           const bw=Math.min(Math.abs(c.pct),100);
