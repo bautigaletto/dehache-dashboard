@@ -1949,6 +1949,12 @@ function calcSens(){
   const nMNa    = nCobrado>0?nResultadoA/nCobrado*100:0;
   const extraA  = nResultadoA - totResultado;
 
+  // Margen bruto (sobre cobrado): antes y después del cambio de precio
+  const mbActualPesos = totCobrado - totCosto;
+  const mbActualPct   = totCobrado>0 ? mbActualPesos/totCobrado*100 : 0;
+  const nMbPesos      = nCobrado - totCosto;
+  const nMbPct        = nCobrado>0 ? nMbPesos/nCobrado*100 : 0;
+
   const V_var = (1-descPct) - (1-descPct)*avgComRate - avgIIBBRate - (1-descPct)*gfFinPct;
   const nuevaContrib = nMonto * V_var;
 
@@ -1994,6 +2000,14 @@ function calcSens(){
         <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:#fff;border-radius:8px;border:1px solid #e8e0fc">
           <span style="font-size:12px;color:var(--muted)">Costo mercadería</span>
           <span style="font-family:Oswald,sans-serif;font-size:15px;font-weight:700;color:var(--muted)">${fmtM(totCosto)} <span style="font-size:10px">sin cambio</span></span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:#fff;border-radius:8px;border:1px solid #e8e0fc">
+          <span style="font-size:12px;color:var(--muted)">Margen bruto</span>
+          <div style="text-align:right">
+            <span style="font-family:Oswald,sans-serif;font-size:15px;font-weight:700;color:var(--amber)">${nMbPct.toFixed(2)}%</span>
+            ${dp!==0?`<span style="font-size:11px;font-weight:700;color:${nMbPct>=mbActualPct?'var(--ok)':'var(--red)'}"> ${nMbPct>=mbActualPct?'▲ +':'▼ '}${Math.abs(nMbPct-mbActualPct).toFixed(2)} pts</span>`:''}
+            <div style="font-size:10.5px;color:var(--muted)">hoy: ${mbActualPct.toFixed(2)}% · ${fmtM(nMbPesos)} ${dp!==0?`(${nMbPesos>=mbActualPesos?'+':''}${fmtM(nMbPesos-mbActualPesos)})`:''}</div>
+          </div>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:${nResultadoA>=0?'#f0faf5':'#fff8f8'};border-radius:8px;border:1.5px solid ${nResultadoA>=0?'#c3e6d6':'#f6c6cc'}">
           <span style="font-size:12.5px;font-weight:700;color:${nResultadoA>=0?'var(--ok)':'var(--red)'}">Resultado neto</span>
