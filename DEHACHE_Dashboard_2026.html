@@ -1909,10 +1909,28 @@ function calcSens(){
   const dp=parseFloat(sl.value)||0;
   if(valEl) valEl.textContent=(dp>=0?'+':'')+dp+'%';
 
-  const {totMonto,totCobrado,totCosto,totComision,totIIBB,totGF,totGFfin,totResultado,
-         descPct,gfPct,gfFinPct,V_pure,totContribSinGF} = window._rentTotals;
+  const {totMonto:mtdMonto,totCobrado:mtdCobrado,totCosto:mtdCosto,totComision:mtdComision,
+         totIIBB:mtdIIBB,totGFfin:mtdGFfin,
+         descPct,gfFinPct,V_pure} = window._rentTotals;
 
-  if(totMonto===0){resEl.innerHTML='<div style="color:var(--muted);font-size:13px;padding:8px">Sin datos para simular.</div>';return;}
+  if(mtdMonto===0){resEl.innerHTML='<div style="color:var(--muted);font-size:13px;padding:8px">Sin datos para simular.</div>';return;}
+
+  // ── Base de la simulación: ventas proyectadas del panel de parámetros ──
+  const RS = window.rentState||{};
+  const proyectado = (parseFloat(RS.totalVentasRef)||0) > 0;
+  const baseMonto  = proyectado ? RS.totalVentasRef : mtdMonto;
+  const escala     = baseMonto / mtdMonto;
+
+  // Costos variables escalan con las ventas; el gasto fijo NO
+  const totMonto    = baseMonto;
+  const totCobrado  = mtdCobrado  * escala;
+  const totCosto    = mtdCosto    * escala;
+  const totComision = mtdComision * escala;
+  const totIIBB     = mtdIIBB     * escala;
+  const totGFfin    = mtdGFfin    * escala;
+  const totGF       = parseFloat(RS.gastoFijoTotal)||0;
+  const gfPct       = totMonto>0 ? totGF/totMonto : 0;
+  const totResultado= totMonto - totMonto*descPct - totCosto - totComision - totIIBB - totGF - totGFfin;
 
   const d=dp/100;
   // Avg rates from actual data
@@ -1925,13 +1943,13 @@ function calcSens(){
   const nDescuento= nMonto*descPct;
   const nComision = nCobrado*avgComRate;
   const nIIBB    = nMonto*avgIIBBRate;
-  const nGF      = nMonto*gfPct;
+  const nGF      = totGF;              // gasto fijo no escala
   const nGFfin   = nCobrado*gfFinPct;
   const nResultadoA = nMonto - nDescuento - totCosto - nComision - nIIBB - nGF - nGFfin;
   const nMNa    = nCobrado>0?nResultadoA/nCobrado*100:0;
   const extraA  = nResultadoA - totResultado;
 
-  const V_var = (1-descPct) - (1-descPct)*avgComRate - avgIIBBRate - gfPct - (1-descPct)*gfFinPct;
+  const V_var = (1-descPct) - (1-descPct)*avgComRate - avgIIBBRate - (1-descPct)*gfFinPct;
   const nuevaContrib = nMonto * V_var;
 
   // ── Escenario B: GF es costo FIJO (no escala con volumen) ──────────────────
@@ -1956,6 +1974,11 @@ function calcSens(){
   const lbl = dp>0?`Subís precios ${dp}%`:dp<0?`Bajás precios ${Math.abs(dp)}%`:'Sin cambio';
 
   resEl.innerHTML=`
+  <div style="font-size:11.5px;color:var(--muted);margin-bottom:12px;padding:8px 12px;background:var(--bg);border-radius:8px">
+    Base de simulación: <b style="color:var(--navy)">${fmtM(totMonto)}</b>
+    ${proyectado?'· ventas proyectadas del panel de parámetros':'· ventas del mes en curso <span style="color:var(--amber)">(cargá las ventas proyectadas arriba para simular sobre el mes completo)</span>'}
+    · gasto fijo <b style="color:var(--navy)">${fmtM(totGF)}</b>
+  </div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
 
     <!-- Escenario A -->
