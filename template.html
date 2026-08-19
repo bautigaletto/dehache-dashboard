@@ -1551,6 +1551,7 @@ function renderRentabilidad(){
       recalcRent();
     });
   }
+
   wireMoneyInput('rent-ventas','totalVentasRef');
   wireMoneyInput('rent-gasto','gastoFijoTotal');
 
@@ -1567,13 +1568,14 @@ function recalcRent(){
   const comPct   = RS.comPct   /100;
   const iibbPct  = RS.iibbPct  /100;
   const gfFinPct = RS.gfFinPct /100;
+  const GF_FIJO  = 41000000;   // usado SOLO para el punto de equilibrio
   const gfPct    = RS.totalVentasRef>0 ? RS.gastoFijoTotal/RS.totalVentasRef : 0;
+
+  const fletesIdx = M.levels.indexOf('Fletes');
 
   // Update GF% display
   const gfEl = document.getElementById('gf-pct-show');
   if(gfEl) gfEl.textContent = RS.totalVentasRef>0 ? (gfPct*100).toFixed(2)+'%' : '— (ingresá ventas)';
-
-  const fletesIdx = M.levels.indexOf('Fletes');
 
   let totMonto=0,totCobrado=0,totDescuento=0,totCosto=0,totComision=0,totIIBB=0,totGF=0,totGFfin=0,totResultado=0;
   const byVend=new Map(), byNivel=new Map(), byZona=new Map(), byCliente=new Map(), detail=[];
@@ -1593,7 +1595,7 @@ function recalcRent(){
     if(comRate === null) continue;  // exclude Daniel Hernández
     const comision = cobrado * (comRate/100);
     const iibb     = linea===1 ? monto*iibbPct : 0;
-    const gf       = monto*gfPct;
+    const gf       = monto * gfPct;
     const gfFin    = cobrado*gfFinPct;
     const resultado= monto-descuento-costo-comision-iibb-gf-gfFin;
     const mneto    = monto>0?resultado/monto*100:0;
@@ -1630,7 +1632,7 @@ function recalcRent(){
     {lab:'= Margen bruto $',             val:totMbBruto,    pct:totMbBruto/totCobrado*100,          col:'var(--amber)',isSub:true},
     {lab:'− Comisión vendedor',          val:-totComision,  pct:-totComision/totCobrado*100,        col:'var(--red)'},
     {lab:'− IIBB + CyI '+RS.iibbPct+'% (L1)',val:-totIIBB, pct:-totIIBB/totCobrado*100,            col:'var(--red)'},
-    {lab:'− Gastos fijos '+(gfPct*100).toFixed(2)+'%',val:-totGF,pct:-totGF/totCobrado*100,        col:'var(--red)'},
+    {lab:'− Gastos fijos '+(gfPct*100).toFixed(2)+'%',val:-totGF,pct:-totGF/totCobrado*100,col:'var(--red)'},
     {lab:'− Gastos financieros '+RS.gfFinPct+'%',val:-totGFfin,pct:-totGFfin/totCobrado*100,       col:'var(--red)'},
     {lab:'= RESULTADO NETO',             val:totResultado,  pct:totMN,                              col:totResultado>=0?'var(--ok)':'var(--red)',isTotal:true},
   ];
@@ -1708,24 +1710,332 @@ function recalcRent(){
       </table>
     </div>
 
-    <!-- Por cliente -->
-    <div class="card">
-      <div class="sec-h" style="margin-bottom:12px"><span class="bar" style="background:var(--navy2)"></span><h2>Por cliente</h2><span class="sub">Top 30 por facturación</span></div>
-      <table class="tbl">
-        <thead><tr><th>Cliente</th><th class="r">Ventas</th><th class="r">MB prom.</th><th class="r">Resultado</th><th class="r">Margen neto</th><th class="r">Líneas</th></tr></thead>
-        <tbody>${[...byCliente.values()].sort((a,b)=>b.monto-a.monto).slice(0,30).map(cl=>{
-          const mn=cl.monto>0?cl.resultado/cl.monto*100:0;
-          const mbA=cl.filas>0?cl.mb_sum/cl.filas:0;
-          return `<tr>
-            <td><b style="font-size:12.5px">${cl.name}</b></td>
-            <td class="r">${fmtM(cl.monto)}</td>
-            <td class="r" style="color:var(--amber)">${mbA.toFixed(1)}%</td>
-            <td class="r" style="color:${cl.resultado>=0?'var(--ok)':'var(--red)'};font-weight:700">${fmtM(cl.resultado)}</td>
-            <td class="r" style="color:${mn>=0?'var(--ok)':'var(--red)'};font-weight:700">${mn.toFixed(2)}%</td>
-            <td class="r" style="color:var(--muted)">${cl.filas}</td>
-          </tr>`;}).join('')}</tbody>
-      </table>
+    <!-- Simulación de precio -->
+    <div class="card" style="margin-top:14px">
+      <div class="sec-h" style="margin-bottom:14px">
+        <span class="bar" style="background:#7c3aed"></span>
+        <h2>Simulación de cambio de precio</h2>
+        <span class="sub">¿Qué pasa si subís o bajás los precios este mes?</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+        <label style="font-size:12.5px;font-weight:600;color:var(--ink);white-space:nowrap">Variación de precio:</label>
+        <input type="range" id="rent-sens-slider" min="-20" max="20" step="0.5" value="0"
+          style="flex:1;min-width:160px;accent-color:#7c3aed">
+        <span id="rent-sens-val" style="font-family:Oswald,sans-serif;font-size:22px;font-weight:700;color:#7c3aed;min-width:60px;text-align:right">0%</span>
+      </div>
+      <div id="rent-sens-result"></div>
     </div>`;
+
+  // Store totals for sensitivity calc
+  const avgComRateR  = totCobrado>0?totComision/totCobrado:0;
+  const avgIIBBRateR = totMonto>0?totIIBB/totMonto:0;
+  const V_pureR = (1-descPct)*(1-avgComRateR-gfFinPct) - avgIIBBRateR;
+  const totContribSinGF = totMonto * V_pureR - totCosto;
+  window._rentTotals = {totMonto,totCobrado,totCosto,totComision,totIIBB,totGF,totGFfin,totResultado,
+    descPct,gfPct,gfFinPct,V_pure:V_pureR,totContribSinGF};
+
+  // ── PUNTO DE EQUILIBRIO ─────────────────────────────────────────────────────
+  // Contribución por peso de venta EXCLUYENDO gastos fijos (usa margen real del mes)
+  const contribBE = totMonto - totDescuento - totCosto - totComision - totIIBB - totGFfin;
+  const r_net = totMonto>0 ? contribBE/totMonto : 0;
+  const ventasBE = r_net>0 ? GF_FIJO/r_net : null;        // ventas para cubrir los $41 M
+  const gapBE    = ventasBE!=null ? totMonto-ventasBE : null;
+  const pctBE    = ventasBE!=null ? totMonto/ventasBE*100 : null;
+  // Proyección del mes (si el mes seleccionado es el actual y está incompleto)
+  const isCurrentMonth = RS.selMonth===M.currentMonth;
+  const proyVentas = isCurrentMonth && M.lastDayNum<M.daysInCurrentMonth
+    ? totMonto*(M.daysInCurrentMonth/M.lastDayNum) : null;
+  const proyBE  = proyVentas!=null && ventasBE!=null ? proyVentas-ventasBE : null;
+  const pctProyBE = proyVentas!=null && ventasBE!=null ? proyVentas/ventasBE*100 : null;
+
+  const beColor = gapBE!=null ? (gapBE>=0?'var(--ok)':'var(--red)') : 'var(--muted)';
+  const beCard = ventasBE!=null ? `
+  <div class="card" style="margin-bottom:14px;border:2px solid ${gapBE>=0?'#c3e6d6':'#dde4f5'}">
+    <div class="sec-h" style="margin-bottom:14px">
+      <span class="bar" style="background:#7c3aed"></span>
+      <h2>Punto de equilibrio del mes</h2>
+      <span class="sub">Cálculo independiente · Ventas necesarias para cubrir $41.000.000 de gastos fijos con el margen real del mes</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px">
+      <div style="background:#f5f0ff;border-radius:11px;padding:14px;border:1.5px solid #ddd0f8">
+        <div style="font-size:10.5px;font-weight:700;color:#7c3aed;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Punto de equilibrio</div>
+        <div style="font-family:Oswald,sans-serif;font-size:22px;font-weight:700;color:#7c3aed">${fmtM(ventasBE)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:3px">margen de contribución ${(r_net*100).toFixed(2)}%</div>
+      </div>
+      <div style="background:var(--bg);border-radius:11px;padding:14px;border:1.5px solid var(--line)">
+        <div style="font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Ventas del mes</div>
+        <div style="font-family:Oswald,sans-serif;font-size:22px;font-weight:700;color:var(--ink)">${fmtM(totMonto)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:3px">${pctBE.toFixed(1)}% del punto de equilibrio</div>
+      </div>
+      <div style="background:${gapBE>=0?'#f0faf5':'#fff8f8'};border-radius:11px;padding:14px;border:1.5px solid ${gapBE>=0?'#c3e6d6':'#f6c6cc'}">
+        <div style="font-size:10.5px;font-weight:700;color:${beColor};text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">${gapBE>=0?'Superávit sobre BE':'Falta para el BE'}</div>
+        <div style="font-family:Oswald,sans-serif;font-size:22px;font-weight:700;color:${beColor}">${gapBE>=0?'+':''}${fmtM(gapBE)}</div>
+        <div style="font-size:11px;color:${beColor};font-weight:600;margin-top:3px">${gapBE>=0?'✅ Mes rentable':'❌ Por debajo del BE'}</div>
+      </div>
+      ${proyVentas!=null?`
+      <div style="background:${pctProyBE>=100?'#f0faf5':'#fff8f0'};border-radius:11px;padding:14px;border:1.5px solid ${pctProyBE>=100?'#c3e6d6':'#f5d9b0'}">
+        <div style="font-size:10.5px;font-weight:700;color:${pctProyBE>=100?'var(--ok)':'var(--amber)'};text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Proyección cierre</div>
+        <div style="font-family:Oswald,sans-serif;font-size:22px;font-weight:700;color:${pctProyBE>=100?'var(--ok)':'var(--amber)'}">${fmtM(proyVentas)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:3px">${pctProyBE.toFixed(0)}% del BE · ${M.lastDayNum}/${M.daysInCurrentMonth} días</div>
+      </div>`:``}
+    </div>
+
+    <!-- Barra de progreso hacia el BE -->
+    <div style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted);margin-bottom:5px">
+        <span>$0</span>
+        <span style="font-weight:700;color:#7c3aed">BE: ${fmtM(ventasBE)}</span>
+        ${proyVentas!=null&&proyVentas>ventasBE?`<span>Proy: ${fmtM(proyVentas)}</span>`:''}
+      </div>
+      <div style="background:#eef3ff;border-radius:8px;height:18px;overflow:hidden;position:relative">
+        <!-- Actual -->
+        <div style="position:absolute;left:0;top:0;height:100%;border-radius:8px;
+          background:${gapBE>=0?'#1f8a5b':'#B11425'};
+          width:${Math.min(pctBE,100)}%;transition:.3s"></div>
+        <!-- Proyección -->
+        ${proyVentas!=null?`<div style="position:absolute;left:0;top:0;height:100%;border-radius:8px;
+          background:${pctProyBE>=100?'rgba(31,138,91,.3)':'rgba(224,152,43,.3)'};
+          width:${Math.min(pctProyBE,100)}%;transition:.3s"></div>`:``}
+        <!-- Marca BE -->
+        <div style="position:absolute;left:100%;top:0;width:2px;height:100%;background:#7c3aed;transform:translateX(-1px)"></div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap;font-size:11px">
+        <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:${gapBE>=0?'#1f8a5b':'#B11425'}"></span>Ventas actuales (${pctBE.toFixed(0)}%)</span>
+        ${proyVentas!=null?`<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:${pctProyBE>=100?'rgba(31,138,91,.5)':'rgba(224,152,43,.5)'}"></span>Proyección (${pctProyBE.toFixed(0)}%)</span>`:''}
+        <span style="display:flex;align-items:center;gap:4px"><span style="width:2px;height:10px;background:#7c3aed"></span>Punto equilibrio</span>
+      </div>
+    </div>
+  </div>` : '';
+
+  out.innerHTML = beCard + out.innerHTML;
+  if(totResultado < 0 && totMonto > 0){
+    const perdida = -totResultado;
+    const hayGF   = totGF > 0;
+
+    // 1. Subir precios para llegar a 0 (mismo volumen)
+    //    nMonto × V_pureR = totCosto + totGF → Δ = nMonto/totMonto - 1
+    const nMonto_be = V_pureR > 0 ? (totCosto + totGF) / V_pureR : null;
+    const pctPrecio = nMonto_be != null ? (nMonto_be / totMonto - 1) * 100 : null;
+
+    // 2. Vender más para llegar a 0 (mismo precio)
+    //    Solo si contribución por unidad > 0
+    const pctVolumen = (hayGF && totContribSinGF > 0)
+      ? (totGF / totContribSinGF - 1) * 100        // cuánto más del vol. actual
+      : (!hayGF && totContribSinGF > 0)
+        ? null   // sin GF configurados no es significativo
+        : null;  // contribución negativa: precio demasiado bajo
+
+    // 3. Bajar gastos fijos para llegar a 0 (mismo precio y volumen)
+    //    Reducir GF en exactamente el monto de la pérdida
+    const gfReduccion = hayGF ? Math.min(perdida, totGF) : null;
+    const gfReducPct  = hayGF ? perdida / totGF * 100 : null;
+
+    const diagHTML = `
+    <div class="card" style="border:2px solid #f6c6cc;background:#fff8f8;margin-bottom:14px">
+      <div class="sec-h" style="margin-bottom:14px">
+        <span class="bar" style="background:var(--red)"></span>
+        <h2 style="color:var(--red)">⚠ Diagnóstico — Resultado negativo</h2>
+        <span class="sub">El mes cierra con pérdida de <b>${fmtM(perdida)}</b>. Estas son las palancas para revertirlo:</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
+
+        <!-- Palanca 1: Precio -->
+        <div style="background:#fff;border-radius:12px;padding:14px;border:1.5px solid ${pctPrecio!=null&&pctPrecio<50?'#c3e6d6':'#f6c6cc'}">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);margin-bottom:8px">① Subir precios</div>
+          ${pctPrecio != null ? `
+          <div style="font-family:Oswald,sans-serif;font-size:28px;font-weight:700;color:${pctPrecio<50?'var(--ok)':'var(--red)'}">+${pctPrecio.toFixed(1)}%</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px;line-height:1.4">
+            Subir precios un <b>${pctPrecio.toFixed(1)}%</b> con el mismo volumen llevaría el resultado a cero.<br>
+            ${pctPrecio<5?'✅ Ajuste pequeño y viable.':pctPrecio<15?'⚠ Ajuste moderado — analizar impacto en clientes.':'❌ Ajuste alto — puede afectar la demanda significativamente.'}
+          </div>` : `
+          <div style="font-size:12.5px;color:var(--red)">No calculable — margen variable negativo.</div>`}
+        </div>
+
+        <!-- Palanca 2: Volumen -->
+        <div style="background:#fff;border-radius:12px;padding:14px;border:1.5px solid ${pctVolumen!=null&&pctVolumen<50?'#c3e6d6':'#f6c6cc'}">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);margin-bottom:8px">② Vender más</div>
+          ${!hayGF ? `
+          <div style="font-size:12px;color:var(--amber);font-weight:600">⚙ Ingresá los gastos fijos para calcular cuánto más hay que vender.</div>
+          ` : pctVolumen != null ? `
+          <div style="font-family:Oswald,sans-serif;font-size:28px;font-weight:700;color:${pctVolumen<50?'var(--ok)':'var(--red)'}">+${pctVolumen.toFixed(1)}%</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px;line-height:1.4">
+            Necesitás vender <b>${pctVolumen.toFixed(1)}%</b> más que este mes (${fmtM(totMonto*pctVolumen/100)} adicionales) para cubrir gastos fijos y llegar a cero.
+            ${pctVolumen<20?'<br>✅ Meta alcanzable.':pctVolumen<50?'<br>⚠ Esfuerzo significativo.':'<br>❌ Meta muy alta — combiná con otras palancas.'}
+          </div>
+          ` : `
+          <div style="font-size:12.5px;color:var(--red)">Contribución variable negativa — subir precios primero.</div>`}
+        </div>
+
+        <!-- Palanca 3: Bajar GF -->
+        <div style="background:#fff;border-radius:12px;padding:14px;border:1.5px solid ${hayGF&&gfReducPct!=null&&gfReducPct<50?'#c3e6d6':'#dde4f5'}">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);margin-bottom:8px">③ Reducir gastos fijos</div>
+          ${!hayGF ? `
+          <div style="font-size:12px;color:var(--amber);font-weight:600">⚙ Ingresá los gastos fijos en los parámetros.</div>
+          ` : `
+          <div style="font-family:Oswald,sans-serif;font-size:28px;font-weight:700;color:${gfReducPct<30?'var(--ok)':'var(--red)'}">${fmtM(gfReduccion)}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px;line-height:1.4">
+            Reducir gastos fijos en <b>${fmtM(gfReduccion)}</b> (${gfReducPct.toFixed(0)}% del total de GF) llevaría el resultado a cero.
+            ${gfReducPct<15?'<br>✅ Reducción manejable.':gfReducPct<40?'<br>⚠ Reducción importante.':'<br>❌ Reducción difícil de lograr — combiná con otras palancas.'}
+          </div>`}
+        </div>
+      </div>
+
+      ${pctPrecio!=null&&pctVolumen!=null&&hayGF?`
+      <div style="margin-top:12px;padding:10px 14px;background:#fff;border-radius:10px;border:1px solid #dde4f5">
+        <span style="font-size:12px;font-weight:700;color:var(--navy)">💡 Combinado: </span>
+        <span style="font-size:12px;color:var(--muted)">
+          Subir precios <b>+${(pctPrecio/2).toFixed(1)}%</b> y vender <b>+${(pctVolumen/2).toFixed(1)}%</b> más logra el mismo efecto repartiendo el esfuerzo entre ambas palancas.
+        </span>
+      </div>`:''}
+    </div>`;
+
+    out.innerHTML = diagHTML + out.innerHTML;
+  }
+
+  // Wire slider
+  setTimeout(()=>{
+    const sl=document.getElementById('rent-sens-slider');
+    if(sl){ sl.oninput=()=>calcSens(); calcSens(); }
+  },50);
+}
+
+function calcSens(){
+  const sl=document.getElementById('rent-sens-slider');
+  const valEl=document.getElementById('rent-sens-val');
+  const resEl=document.getElementById('rent-sens-result');
+  if(!sl||!resEl||!window._rentTotals) return;
+
+  const dp=parseFloat(sl.value)||0;
+  if(valEl) valEl.textContent=(dp>=0?'+':'')+dp+'%';
+
+  const {totMonto,totCobrado,totCosto,totComision,totIIBB,totGF,totGFfin,totResultado,
+         descPct,gfPct,gfFinPct,V_pure,totContribSinGF} = window._rentTotals;
+
+  if(totMonto===0){resEl.innerHTML='<div style="color:var(--muted);font-size:13px;padding:8px">Sin datos para simular.</div>';return;}
+
+  const d=dp/100;
+  // Avg rates from actual data
+  const avgComRate = totCobrado>0?totComision/totCobrado:0;
+  const avgIIBBRate= totMonto>0?totIIBB/totMonto:0;
+
+  // ── Escenario A: mismo volumen, precio cambia ──
+  const nMonto   = totMonto*(1+d);
+  const nCobrado = nMonto*(1-descPct);
+  const nDescuento= nMonto*descPct;
+  const nComision = nCobrado*avgComRate;
+  const nIIBB    = nMonto*avgIIBBRate;
+  const nGF      = nMonto*gfPct;
+  const nGFfin   = nCobrado*gfFinPct;
+  const nResultadoA = nMonto - nDescuento - totCosto - nComision - nIIBB - nGF - nGFfin;
+  const nMNa    = nCobrado>0?nResultadoA/nCobrado*100:0;
+  const extraA  = nResultadoA - totResultado;
+
+  const V_var = (1-descPct) - (1-descPct)*avgComRate - avgIIBBRate - gfPct - (1-descPct)*gfFinPct;
+  const nuevaContrib = nMonto * V_var;
+
+  // ── Escenario B: GF es costo FIJO (no escala con volumen) ──────────────────
+  // V_pure viene de _rentTotals (ya destructurado arriba)
+  const nContribSinGF = nMonto * V_pure - totCosto; // contrib. bruta sin GF
+
+  // Para mantener el mismo resultado con nuevo precio y volumen q:
+  //   q × nContribSinGF - totGF_fijo = totResultado
+  //   q = (totResultado + totGF) / nContribSinGF
+  const sensResultadoNegativo = totResultado < 0;
+  const sinGFconfigurado = totGF === 0;
+  let nVentasB = null, caida = null;
+  if(!sensResultadoNegativo && !sinGFconfigurado && nContribSinGF > 0){
+    const q_B = (totResultado + totGF) / nContribSinGF;
+    if(q_B > 0 && q_B < 2){
+      nVentasB = q_B * nMonto;
+      caida    = (nVentasB / totMonto - 1) * 100;
+    }
+  }
+
+  const col = dp>0?'#7c3aed':dp<0?'var(--red)':'var(--muted)';
+  const lbl = dp>0?`Subís precios ${dp}%`:dp<0?`Bajás precios ${Math.abs(dp)}%`:'Sin cambio';
+
+  resEl.innerHTML=`
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+
+    <!-- Escenario A -->
+    <div style="background:#f5f0ff;border-radius:12px;padding:14px;border:1.5px solid #ddd0f8">
+      <div style="font-size:11px;font-weight:700;color:#7c3aed;text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">
+        📦 ${lbl} · mismo volumen vendido
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:#fff;border-radius:8px;border:1px solid #e8e0fc">
+          <span style="font-size:12px;color:var(--muted)">Nuevas ventas (lista)</span>
+          <span style="font-family:Oswald,sans-serif;font-size:15px;font-weight:700;color:var(--ink)">${fmtM(nMonto)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:#fff;border-radius:8px;border:1px solid #e8e0fc">
+          <span style="font-size:12px;color:var(--muted)">Costo mercadería</span>
+          <span style="font-family:Oswald,sans-serif;font-size:15px;font-weight:700;color:var(--muted)">${fmtM(totCosto)} <span style="font-size:10px">sin cambio</span></span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:${nResultadoA>=0?'#f0faf5':'#fff8f8'};border-radius:8px;border:1.5px solid ${nResultadoA>=0?'#c3e6d6':'#f6c6cc'}">
+          <span style="font-size:12.5px;font-weight:700;color:${nResultadoA>=0?'var(--ok)':'var(--red)'}">Resultado neto</span>
+          <div style="text-align:right">
+            <div style="font-family:Oswald,sans-serif;font-size:20px;font-weight:700;color:${nResultadoA>=0?'var(--ok)':'var(--red)'}">${fmtM(nResultadoA)}</div>
+            <div style="font-size:11px;color:${nMNa>=0?'var(--ok)':'var(--red)'};font-weight:600">${nMNa.toFixed(2)}% s/cobrado</div>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:${extraA>=0?'#f0faf5':'#fff8f8'};border-radius:8px">
+          <span style="font-size:12px;font-weight:600;color:${extraA>=0?'var(--ok)':'var(--red)'}">${extraA>=0?'▲ Ganás de más':'▼ Perdés'}</span>
+          <span style="font-family:Oswald,sans-serif;font-size:16px;font-weight:700;color:${extraA>=0?'var(--ok)':'var(--red)'}">${fmtM(Math.abs(extraA))}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Escenario B -->
+    <div style="background:#fff8f0;border-radius:12px;padding:14px;border:1.5px solid #f5d9b0">
+      <div style="font-size:11px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">
+        ${sensResultadoNegativo
+          ? (nResultadoA>0
+            ? '✅ Esta suba de precios revierte la pérdida'
+            : '⚠ Resultado negativo · suba insuficiente')
+          : (dp>=0?'📉 Máxima caída de ventas tolerable':'📈 Cuánto más hay que vender')}
+        <span style="font-weight:400"> · ${sensResultadoNegativo?'':'mismo resultado que hoy'}</span>
+      </div>
+      ${sensResultadoNegativo ? `
+        <div style="padding:10px 12px;background:#fff;border-radius:8px;border:1px solid #f5d9b0;margin-bottom:8px">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:6px">El resultado actual del mes es <b style="color:var(--red)">${fmtM(totResultado)}</b> (negativo).</div>
+          ${nResultadoA>0
+            ? `<div style="font-size:12.5px;color:var(--ok);font-weight:600">✅ Con esta suba de precios, vendiendo el mismo volumen el resultado pasa a <b>${fmtM(nResultadoA)}</b> (positivo).</div>`
+            : `<div style="font-size:12.5px;color:var(--red);font-weight:600">❌ Incluso con esta suba, el resultado sigue negativo (${fmtM(nResultadoA)}). Necesitás un mayor ajuste de precios.</div>`
+          }
+        </div>
+        <div style="padding:8px 12px;background:#fff;border-radius:8px;border:1px solid #f5d9b0;font-size:11.5px;color:var(--muted)">
+          La simulación de caída tolerable aplica solo cuando el resultado es positivo.
+        </div>
+      ` : sinGFconfigurado ? `
+        <div style="padding:14px;background:#fff;border-radius:8px;border:1px solid #f5d9b0;text-align:center">
+          <div style="font-size:24px;margin-bottom:8px">⚙</div>
+          <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:6px">Gastos fijos no configurados</div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.5">Para calcular cuánto puede caer la facturación,
+          ingresá el monto de <b>ventas totales</b> y <b>gasto fijo mensual</b> en el panel de parámetros de arriba.<br>
+          <span style="color:var(--amber);font-weight:600">Los gastos fijos no escalan con las ventas — son el dato clave del análisis.</span></div>
+        </div>
+      ` : `
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:#fff;border-radius:8px;border:1px solid #f5d9b0">
+          <span style="font-size:12px;color:var(--muted)">${dp>=0?'Podés facturar tan solo':'Necesitás facturar al menos'}</span>
+          <span style="font-family:Oswald,sans-serif;font-size:15px;font-weight:700;color:var(--ink)">${nVentasB!=null?fmtM(nVentasB):'—'}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#fff8f0;border-radius:8px;border:1.5px solid #f5d9b0">
+          <span style="font-size:12.5px;font-weight:700;color:var(--amber)">${dp>=0?'Caída tolerable':'Incremento necesario'}</span>
+          <div style="text-align:right">
+            <div style="font-family:Oswald,sans-serif;font-size:28px;font-weight:700;color:var(--amber)">${caida!=null?Math.abs(caida).toFixed(1)+'%':'—'}</div>
+            <div style="font-size:11px;color:var(--muted)">${nVentasB!=null?fmtM(Math.abs(nVentasB-totMonto))+' en ventas':''}</div>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:#fff;border-radius:8px;border:1px solid #f5d9b0">
+          <span style="font-size:12px;color:var(--muted)">Resultado neto objetivo</span>
+          <span style="font-family:Oswald,sans-serif;font-size:15px;font-weight:700;color:${totResultado>=0?'var(--ok)':'var(--red)'}">${fmtM(totResultado)} <span style="font-size:10px">igual que hoy</span></span>
+        </div>
+      </div>`}
+    </div>
+
+  </div>`;
 }
 
 function paramRow(label, key, unit, val, hint){
@@ -1814,7 +2124,7 @@ function openCotizador(){
           <div><label style="font-size:10.5px;font-weight:700;color:#5b6b86;display:block;margin-bottom:4px">GF financieros %</label>
             <input id="cp-gffin" type="number" min="0" max="20" step="0.1" value="${RS.gfFinPct}" style="width:100%;padding:7px 8px;border:1.5px solid #dde4f5;border-radius:8px;font-size:14px;font-family:Oswald,sans-serif;font-weight:600;color:#01216A;text-align:right"></div>
           <div><label style="font-size:10.5px;font-weight:700;color:#5b6b86;display:block;margin-bottom:4px">Gastos fijos %</label>
-            <input id="cp-gf" type="number" min="0" max="50" step="0.1" value="${(RS.totalVentasRef>0?RS.gastoFijoTotal/RS.totalVentasRef*100:0).toFixed(2)}" style="width:100%;padding:7px 8px;border:1.5px solid #dde4f5;border-radius:8px;font-size:14px;font-family:Oswald,sans-serif;font-weight:600;color:#01216A;text-align:right"></div>
+            <input id="cp-gf" type="number" min="0" max="50" step="0.1" value="${(totMonto>0?41000000/totMonto*100:0).toFixed(2)}" style="width:100%;padding:7px 8px;border:1.5px solid #dde4f5;border-radius:8px;font-size:14px;font-family:Oswald,sans-serif;font-weight:600;color:#01216A;text-align:right"></div>
         </div>
       </details>
 
@@ -1906,7 +2216,7 @@ function openCotizador(){
     const comPct  =getCPParam('cp-com',   RS.comPct   )/100;
     const iibbPct =getCPParam('cp-iibb',  RS.iibbPct  )/100;
     const gfFinPct=getCPParam('cp-gffin', RS.gfFinPct )/100;
-    const gfPct   =getCPParam('cp-gf',    RS.totalVentasRef>0?RS.gastoFijoTotal/RS.totalVentasRef*100:0)/100;
+    const gfPct   =getCPParam('cp-gf',    RS.totalVentasRef>0?41000000/RS.totalVentasRef*100:0)/100;
     const vendName=getVendName();
     const vComRate=getComRate(vendName, comPct*100)/100;
 
