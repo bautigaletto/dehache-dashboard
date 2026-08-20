@@ -1568,7 +1568,8 @@ function recalcRent(){
   const comPct   = RS.comPct   /100;
   const iibbPct  = RS.iibbPct  /100;
   const gfFinPct = RS.gfFinPct /100;
-  const GF_FIJO  = 41000000;   // usado SOLO para el punto de equilibrio
+  const GF_FIJO   = 42500000;  // usado SOLO para el punto de equilibrio
+  const L2_UPLIFT = 0.105;     // Línea 2 (sin factura): +10,5% sobre la venta
   const gfPct    = RS.totalVentasRef>0 ? RS.gastoFijoTotal/RS.totalVentasRef : 0;
 
   const fletesIdx = M.levels.indexOf('Fletes');
@@ -1584,12 +1585,13 @@ function recalcRent(){
     if(R.m[i]!==RS.selMonth || R.mb[i]==null) continue;
     if(R.n[i]===fletesIdx) continue;  // excluir Fletes
 
-    const monto    = R.imp[i];
-    const mb       = R.mb[i]/100;
     const linea    = R.ln[i];
+    const montoBase= R.imp[i];                                  // importe original facturado
+    const monto    = linea===2 ? montoBase*(1+L2_UPLIFT) : montoBase; // L2: +10,5%
+    const mb       = R.mb[i]/100;
     const cobrado  = monto*(1-descPct);
     const descuento= monto*descPct;
-    const costo    = monto*(1-mb);
+    const costo    = montoBase*(1-mb);                           // el costo no cambia
     const vname    = M.vendors[R.v[i]]||'';
     const comRate  = getComRate(vname, comPct);
     if(comRate === null) continue;  // exclude Daniel Hernández
@@ -1738,7 +1740,7 @@ function recalcRent(){
   // Contribución por peso de venta EXCLUYENDO gastos fijos (usa margen real del mes)
   const contribBE = totMonto - totDescuento - totCosto - totComision - totIIBB - totGFfin;
   const r_net = totMonto>0 ? contribBE/totMonto : 0;
-  const ventasBE = r_net>0 ? GF_FIJO/r_net : null;        // ventas para cubrir los $41 M
+  const ventasBE = r_net>0 ? GF_FIJO/r_net : null;        // ventas para cubrir los $42,5 M
   const gapBE    = ventasBE!=null ? totMonto-ventasBE : null;
   const pctBE    = ventasBE!=null ? totMonto/ventasBE*100 : null;
   // Proyección del mes (si el mes seleccionado es el actual y está incompleto)
@@ -1754,7 +1756,7 @@ function recalcRent(){
     <div class="sec-h" style="margin-bottom:14px">
       <span class="bar" style="background:#7c3aed"></span>
       <h2>Punto de equilibrio del mes</h2>
-      <span class="sub">Cálculo independiente · Ventas necesarias para cubrir $41.000.000 de gastos fijos con el margen real del mes</span>
+      <span class="sub">Cálculo independiente · Ventas necesarias para cubrir $42.500.000 de gastos fijos con el margen real del mes</span>
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px">
       <div style="background:#f5f0ff;border-radius:11px;padding:14px;border:1.5px solid #ddd0f8">
@@ -2161,7 +2163,7 @@ function openCotizador(){
           <div><label style="font-size:10.5px;font-weight:700;color:#5b6b86;display:block;margin-bottom:4px">GF financieros %</label>
             <input id="cp-gffin" type="number" min="0" max="20" step="0.1" value="${RS.gfFinPct}" style="width:100%;padding:7px 8px;border:1.5px solid #dde4f5;border-radius:8px;font-size:14px;font-family:Oswald,sans-serif;font-weight:600;color:#01216A;text-align:right"></div>
           <div><label style="font-size:10.5px;font-weight:700;color:#5b6b86;display:block;margin-bottom:4px">Gastos fijos %</label>
-            <input id="cp-gf" type="number" min="0" max="50" step="0.1" value="${(totMonto>0?41000000/totMonto*100:0).toFixed(2)}" style="width:100%;padding:7px 8px;border:1.5px solid #dde4f5;border-radius:8px;font-size:14px;font-family:Oswald,sans-serif;font-weight:600;color:#01216A;text-align:right"></div>
+            <input id="cp-gf" type="number" min="0" max="50" step="0.1" value="${(totMonto>0?42500000/totMonto*100:0).toFixed(2)}" style="width:100%;padding:7px 8px;border:1.5px solid #dde4f5;border-radius:8px;font-size:14px;font-family:Oswald,sans-serif;font-weight:600;color:#01216A;text-align:right"></div>
         </div>
       </details>
 
@@ -2253,17 +2255,18 @@ function openCotizador(){
     const comPct  =getCPParam('cp-com',   RS.comPct   )/100;
     const iibbPct =getCPParam('cp-iibb',  RS.iibbPct  )/100;
     const gfFinPct=getCPParam('cp-gffin', RS.gfFinPct )/100;
-    const gfPct   =getCPParam('cp-gf',    RS.totalVentasRef>0?41000000/RS.totalVentasRef*100:0)/100;
+    const gfPct   =getCPParam('cp-gf',    RS.totalVentasRef>0?42500000/RS.totalVentasRef*100:0)/100;
     const vendName=getVendName();
     const vComRate=getComRate(vendName, comPct*100)/100;
 
     let rows=[];
     cotizItems.forEach(it=>{
-      const monto=it.monto||0; if(!monto) return;
+      const montoBase=it.monto||0; if(!montoBase) return;
+      const monto    =cotizLinea===2?montoBase*1.105:montoBase;  // L2: +10,5%
       const mb  =parseFloat(it.mb)||0;
       const cobrado  =monto*(1-descPct);
       const descuento=monto*descPct;
-      const costo    =monto*(1-mb/100);
+      const costo    =montoBase*(1-mb/100);
       const comision =cobrado*vComRate;
       const iibb     =cotizLinea===1?monto*iibbPct:0;
       const gf       =monto*gfPct;
