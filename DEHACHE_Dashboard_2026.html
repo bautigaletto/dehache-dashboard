@@ -1965,14 +1965,14 @@ function calcSens(){
   const nContribSinGF = nMonto * V_pure - totCosto; // contrib. bruta sin GF
 
   // Para mantener el mismo resultado con nuevo precio y volumen q:
-  //   q × nContribSinGF - totGF_fijo = totResultado
+  //   q × nContribSinGF - totGF = totResultado
   //   q = (totResultado + totGF) / nContribSinGF
-  const sensResultadoNegativo = totResultado < 0;
+  // Vale también con resultado negativo, siempre que la contribución sea positiva.
   const sinGFconfigurado = totGF === 0;
   let nVentasB = null, caida = null;
-  if(!sensResultadoNegativo && !sinGFconfigurado && nContribSinGF > 0){
+  if(nContribSinGF > 0){
     const q_B = (totResultado + totGF) / nContribSinGF;
-    if(q_B > 0 && q_B < 2){
+    if(q_B > 0 && q_B < 5){
       nVentasB = q_B * nMonto;
       caida    = (nVentasB / totMonto - 1) * 100;
     }
@@ -2028,49 +2028,37 @@ function calcSens(){
     <!-- Escenario B -->
     <div style="background:#fff8f0;border-radius:12px;padding:14px;border:1.5px solid #f5d9b0">
       <div style="font-size:11px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">
-        ${sensResultadoNegativo
-          ? (nResultadoA>0
-            ? '✅ Esta suba de precios revierte la pérdida'
-            : '⚠ Resultado negativo · suba insuficiente')
-          : (dp>=0?'📉 Máxima caída de ventas tolerable':'📈 Cuánto más hay que vender')}
-        <span style="font-weight:400"> · ${sensResultadoNegativo?'':'mismo resultado que hoy'}</span>
+        ${dp>0?'📉 Máxima caída de ventas tolerable':dp<0?'📈 Cuánto más hay que vender':'⚖ Volumen necesario'}
+        <span style="font-weight:400"> · para el mismo resultado que hoy</span>
       </div>
-      ${sensResultadoNegativo ? `
-        <div style="padding:10px 12px;background:#fff;border-radius:8px;border:1px solid #f5d9b0;margin-bottom:8px">
-          <div style="font-size:12px;color:var(--muted);margin-bottom:6px">El resultado actual del mes es <b style="color:var(--red)">${fmtM(totResultado)}</b> (negativo).</div>
-          ${nResultadoA>0
-            ? `<div style="font-size:12.5px;color:var(--ok);font-weight:600">✅ Con esta suba de precios, vendiendo el mismo volumen el resultado pasa a <b>${fmtM(nResultadoA)}</b> (positivo).</div>`
-            : `<div style="font-size:12.5px;color:var(--red);font-weight:600">❌ Incluso con esta suba, el resultado sigue negativo (${fmtM(nResultadoA)}). Necesitás un mayor ajuste de precios.</div>`
-          }
-        </div>
-        <div style="padding:8px 12px;background:#fff;border-radius:8px;border:1px solid #f5d9b0;font-size:11.5px;color:var(--muted)">
-          La simulación de caída tolerable aplica solo cuando el resultado es positivo.
-        </div>
-      ` : sinGFconfigurado ? `
+      ${nVentasB==null ? `
         <div style="padding:14px;background:#fff;border-radius:8px;border:1px solid #f5d9b0;text-align:center">
-          <div style="font-size:24px;margin-bottom:8px">⚙</div>
-          <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:6px">Gastos fijos no configurados</div>
-          <div style="font-size:12px;color:var(--muted);line-height:1.5">Para calcular cuánto puede caer la facturación,
-          ingresá el monto de <b>ventas totales</b> y <b>gasto fijo mensual</b> en el panel de parámetros de arriba.<br>
-          <span style="color:var(--amber);font-weight:600">Los gastos fijos no escalan con las ventas — son el dato clave del análisis.</span></div>
+          <div style="font-size:22px;margin-bottom:8px">⚠</div>
+          <div style="font-size:12.5px;color:var(--muted);line-height:1.5">
+            No calculable con estos parámetros: la contribución variable no alcanza para sostener el resultado.
+            ${sinGFconfigurado?'<br><span style="color:var(--amber);font-weight:600">Cargá el gasto fijo en el panel de parámetros de arriba.</span>':''}
+          </div>
         </div>
       ` : `
       <div style="display:flex;flex-direction:column;gap:8px">
         <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:#fff;border-radius:8px;border:1px solid #f5d9b0">
-          <span style="font-size:12px;color:var(--muted)">${dp>=0?'Podés facturar tan solo':'Necesitás facturar al menos'}</span>
-          <span style="font-family:Oswald,sans-serif;font-size:15px;font-weight:700;color:var(--ink)">${nVentasB!=null?fmtM(nVentasB):'—'}</span>
+          <span style="font-size:12px;color:var(--muted)">${caida<=0?'Podés facturar tan solo':'Necesitás facturar al menos'}</span>
+          <span style="font-family:Oswald,sans-serif;font-size:15px;font-weight:700;color:var(--ink)">${fmtM(nVentasB)}</span>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#fff8f0;border-radius:8px;border:1.5px solid #f5d9b0">
-          <span style="font-size:12.5px;font-weight:700;color:var(--amber)">${dp>=0?'Caída tolerable':'Incremento necesario'}</span>
+          <span style="font-size:12.5px;font-weight:700;color:var(--amber)">${caida<=0?'Caída tolerable':'Incremento necesario'}</span>
           <div style="text-align:right">
-            <div style="font-family:Oswald,sans-serif;font-size:28px;font-weight:700;color:var(--amber)">${caida!=null?Math.abs(caida).toFixed(1)+'%':'—'}</div>
-            <div style="font-size:11px;color:var(--muted)">${nVentasB!=null?fmtM(Math.abs(nVentasB-totMonto))+' en ventas':''}</div>
+            <div style="font-family:Oswald,sans-serif;font-size:28px;font-weight:700;color:var(--amber)">${caida<=0?'−':'+'}${Math.abs(caida).toFixed(1)}%</div>
+            <div style="font-size:11px;color:var(--muted)">${fmtM(Math.abs(nVentasB-totMonto))} en ventas</div>
           </div>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:#fff;border-radius:8px;border:1px solid #f5d9b0">
           <span style="font-size:12px;color:var(--muted)">Resultado neto objetivo</span>
           <span style="font-family:Oswald,sans-serif;font-size:15px;font-weight:700;color:${totResultado>=0?'var(--ok)':'var(--red)'}">${fmtM(totResultado)} <span style="font-size:10px">igual que hoy</span></span>
         </div>
+        ${totResultado<0?`<div style="padding:8px 10px;background:#fff;border-radius:8px;border:1px solid #f6c6cc;font-size:11.5px;color:var(--red)">
+          Ojo: el resultado objetivo es una pérdida de ${fmtM(Math.abs(totResultado))}. Esto muestra el volumen que mantiene la misma pérdida, no el punto de equilibrio.
+        </div>`:''}
       </div>`}
     </div>
 
