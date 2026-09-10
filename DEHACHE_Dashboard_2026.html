@@ -2152,12 +2152,30 @@ function openCotizador(){
             <div style="font-size:10px;color:#5b6b86;margin-top:2px">Default (Fansini=3.5%)</div></div>
           <div><label style="font-size:10.5px;font-weight:700;color:#5b6b86;display:block;margin-bottom:4px">IIBB + CyI %</label>
             <input id="cp-iibb" type="number" min="0" max="20" step="0.1" value="${RS.iibbPct}" style="width:100%;padding:7px 8px;border:1.5px solid #dde4f5;border-radius:8px;font-size:14px;font-family:Oswald,sans-serif;font-weight:600;color:#01216A;text-align:right"></div>
-          <div><label style="font-size:10.5px;font-weight:700;color:#5b6b86;display:block;margin-bottom:4px">GF financieros %</label>
-            <input id="cp-gffin" type="number" min="0" max="20" step="0.1" value="${RS.gfFinPct}" style="width:100%;padding:7px 8px;border:1.5px solid #dde4f5;border-radius:8px;font-size:14px;font-family:Oswald,sans-serif;font-weight:600;color:#01216A;text-align:right"></div>
           <div><label style="font-size:10.5px;font-weight:700;color:#5b6b86;display:block;margin-bottom:4px">Gastos fijos %</label>
             <input id="cp-gf" type="number" min="0" max="50" step="0.1" value="${(window._rentTotals&&window._rentTotals.mesProyectado>0?42500000/window._rentTotals.mesProyectado*100:0).toFixed(2)}" style="width:100%;padding:7px 8px;border:1.5px solid #dde4f5;border-radius:8px;font-size:14px;font-family:Oswald,sans-serif;font-weight:600;color:#01216A;text-align:right"></div>
         </div>
       </details>
+
+      <!-- Financiación con cheques -->
+      <div style="background:#f4f7ff;border-radius:10px;padding:12px;margin-bottom:12px;border:1px solid #dde4f5">
+        <div style="font-size:10.5px;font-weight:700;color:#01216A;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">
+          🧾 Financiación con cheques
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:9px">
+          <div><label style="font-size:10.5px;font-weight:700;color:#5b6b86;display:block;margin-bottom:4px">Cant. de cheques</label>
+            <input id="cq-n" type="number" min="0" max="24" step="1" value="0" style="width:100%;padding:7px 8px;border:1.5px solid #dde4f5;border-radius:8px;font-size:14px;font-family:Oswald,sans-serif;font-weight:600;color:#01216A;text-align:right"></div>
+          <div><label style="font-size:10.5px;font-weight:700;color:#5b6b86;display:block;margin-bottom:4px">Intervalo (días)</label>
+            <input id="cq-int" type="number" min="1" max="365" step="1" value="30" style="width:100%;padding:7px 8px;border:1.5px solid #dde4f5;border-radius:8px;font-size:14px;font-family:Oswald,sans-serif;font-weight:600;color:#01216A;text-align:right"></div>
+          <div><label style="font-size:10.5px;font-weight:700;color:#5b6b86;display:block;margin-bottom:4px">Cuántos vendemos</label>
+            <input id="cq-desc" type="number" min="0" max="24" step="1" value="0" style="width:100%;padding:7px 8px;border:1.5px solid #dde4f5;border-radius:8px;font-size:14px;font-family:Oswald,sans-serif;font-weight:600;color:#01216A;text-align:right">
+            <div style="font-size:10px;color:#5b6b86;margin-top:2px">Los de plazo más largo</div></div>
+          <div><label style="font-size:10.5px;font-weight:700;color:#5b6b86;display:block;margin-bottom:4px">TNA base %</label>
+            <input id="cq-tna" type="number" min="0" max="300" step="0.5" value="60" style="width:100%;padding:7px 8px;border:1.5px solid #dde4f5;border-radius:8px;font-size:14px;font-family:Oswald,sans-serif;font-weight:600;color:#01216A;text-align:right">
+            <div style="font-size:10px;color:#5b6b86;margin-top:2px">Editable por cheque abajo</div></div>
+        </div>
+        <div id="cq-detalle" style="margin-top:10px"></div>
+      </div>
 
       <div style="height:1px;background:#dde4f5;margin-bottom:14px"></div>
 
@@ -2177,6 +2195,8 @@ function openCotizador(){
   // State
   let cotizLinea=1;
   let cotizItems=[{desc:'',monto:'',mb:'',fmt:''}]; // desc, monto(raw), mb(%), fmt(display)
+  let cqTNAs={};          // TNA por cheque: {1:60, 2:65, ...}
+  let cqSigStruct='';     // firma de la estructura (n|int|desc) para saber cuándo re-dibujar
 
   function getVendName(){
     const sel=document.getElementById('cotiz-vend');
@@ -2246,10 +2266,29 @@ function openCotizador(){
     const descPct =getCPParam('cp-desc',  RS.descPct  )/100;
     const comPct  =getCPParam('cp-com',   RS.comPct   )/100;
     const iibbPct =getCPParam('cp-iibb',  RS.iibbPct  )/100;
-    const gfFinPct=getCPParam('cp-gffin', RS.gfFinPct )/100;
     const gfPct   =getCPParam('cp-gf',    RS.totalVentasRef>0?42500000/RS.totalVentasRef*100:0)/100;
     const vendName=getVendName();
     const vComRate=getComRate(vendName, comPct*100)/100;
+
+    // ── Financiación con cheques ──
+    const cqN    = Math.max(0, Math.round(getCPParam('cq-n',    0)));
+    const cqInt  = Math.max(1, Math.round(getCPParam('cq-int', 30)));
+    const cqDesc = Math.min(cqN, Math.max(0, Math.round(getCPParam('cq-desc', 0))));
+    const cqTNAbase = getCPParam('cq-tna', 0);
+    // Se descuentan los cheques de plazo más largo: posiciones cqN-cqDesc+1 .. cqN
+    let cqFactor = 0, cqPlan = [];
+    if(cqN > 0){
+      for(let k=1; k<=cqN; k++){
+        const dias = cqInt*k;
+        const vendido = k > (cqN - cqDesc);
+        if(cqTNAs[k]===undefined) cqTNAs[k] = cqTNAbase;    // precarga con la base
+        const tna = vendido ? (cqTNAs[k]/100) : 0;
+        const costoUnit = vendido ? (tna*dias/365) : 0;     // costo sobre el valor del cheque
+        cqPlan.push({k, dias, vendido, tna:cqTNAs[k], costoUnit});
+        cqFactor += costoUnit/cqN;                          // ponderado sobre el total cobrado
+      }
+    }
+    const gfFinPct = cqFactor;
 
     let rows=[];
     cotizItems.forEach(it=>{
@@ -2270,6 +2309,63 @@ function openCotizador(){
     const tot={monto:0,cobrado:0,descuento:0,costo:0,comision:0,iibb:0,gf:0,gfFin:0,resultado:0};
     rows.forEach(r=>{Object.keys(tot).forEach(k=>tot[k]+=r[k]);});
     const mn=tot.monto>0?tot.resultado/tot.monto*100:0;
+
+    // ── Plan de cheques: se re-dibuja solo si cambió la estructura ──
+    const cqEl=document.getElementById('cq-detalle');
+    if(cqEl){
+      const valorCheque = cqN>0 ? tot.cobrado/cqN : 0;
+      const sig = cqN+'|'+cqInt+'|'+cqDesc;
+      if(cqN===0){
+        cqEl.innerHTML='<div style="font-size:11.5px;color:#5b6b86">Sin cheques: no se computa gasto financiero.</div>';
+        cqSigStruct='';
+      } else {
+        if(sig!==cqSigStruct){
+          cqSigStruct=sig;
+          cqEl.innerHTML=`
+          <div id="cq-resumen" style="font-size:11px;color:#5b6b86;margin-bottom:6px"></div>
+          <table style="width:100%;border-collapse:collapse;font-size:11px">
+            <thead><tr style="border-bottom:1px solid #dde4f5">
+              <th style="text-align:left;padding:3px 5px;color:#5b6b86;font-weight:600">Cheque</th>
+              <th style="text-align:right;padding:3px 5px;color:#5b6b86;font-weight:600">Días</th>
+              <th style="text-align:right;padding:3px 5px;color:#5b6b86;font-weight:600">Valor</th>
+              <th style="text-align:center;padding:3px 5px;color:#5b6b86;font-weight:600">Se vende</th>
+              <th style="text-align:right;padding:3px 5px;color:#5b6b86;font-weight:600">TNA %</th>
+              <th style="text-align:right;padding:3px 5px;color:#5b6b86;font-weight:600">Costo</th>
+            </tr></thead>
+            <tbody>${cqPlan.map(c=>`<tr style="border-bottom:1px solid #eef3ff">
+              <td style="padding:3px 5px">#${c.k}</td>
+              <td style="padding:3px 5px;text-align:right">${c.dias}</td>
+              <td style="padding:3px 5px;text-align:right;font-family:Oswald,sans-serif" id="cqv-${c.k}"></td>
+              <td style="padding:3px 5px;text-align:center">${c.vendido?'<span style="color:#B11425;font-weight:700">sí</span>':'<span style="color:#8a97ad">no</span>'}</td>
+              <td style="padding:3px 5px;text-align:right">${c.vendido
+                ? `<input id="cq-tna-${c.k}" type="number" min="0" max="300" step="0.5" value="${c.tna}"
+                     style="width:60px;padding:3px 5px;border:1px solid #dde4f5;border-radius:6px;font-size:11.5px;font-family:Oswald,sans-serif;font-weight:600;color:#01216A;text-align:right">`
+                : '<span style="color:#8a97ad">—</span>'}</td>
+              <td style="padding:3px 5px;text-align:right;font-family:Oswald,sans-serif;color:${c.vendido?'#B11425':'#8a97ad'}" id="cqc-${c.k}"></td>
+            </tr>`).join('')}</tbody>
+          </table>`;
+          // Cablear las TNA por cheque (no re-dibujan la tabla)
+          cqPlan.filter(c=>c.vendido).forEach(c=>{
+            const inp=document.getElementById('cq-tna-'+c.k);
+            if(inp) inp.addEventListener('input',e=>{
+              cqTNAs[c.k]=parseFloat(e.target.value)||0;
+              calcCotiz();
+            });
+          });
+        }
+        // Refrescar solo valores y costos
+        const res=document.getElementById('cq-resumen');
+        if(res) res.innerHTML=`${cqN} cheque${cqN>1?'s':''} de <b style="color:#01216A">$${fmtARS(valorCheque)}</b> cada uno
+          · se vende${cqDesc===1?'':'n'} ${cqDesc}
+          · costo financiero <b style="color:#B11425">$${fmtARS(tot.gfFin)}</b> (${(gfFinPct*100).toFixed(2)}% del cobrado)`;
+        cqPlan.forEach(c=>{
+          const tv=document.getElementById('cqv-'+c.k);
+          if(tv) tv.textContent='$'+fmtARS(valorCheque);
+          const tc=document.getElementById('cqc-'+c.k);
+          if(tc) tc.textContent = c.vendido ? '$'+fmtARS(valorCheque*c.costoUnit) : '—';
+        });
+      }
+    }
 
     const el=document.getElementById('cotiz-result');
     if(!el) return;
@@ -2302,7 +2398,12 @@ function openCotizador(){
           ['− Comisión '+(vComRate===0?'(sin comisión)':(vComRate*100).toFixed(1)+'%'),-tot.comision,null,vComRate===0?'#5b6b86':'#B11425'],
           cotizLinea===1?['− IIBB + CyI '+(iibbPct*100).toFixed(2).replace(/\.?0+$/,'')+'%',-tot.iibb,null,'#B11425']:null,
           gfPct>0?['− Gastos fijos '+(gfPct*100).toFixed(2)+'%',-tot.gf,null,'#B11425']:null,
-          ['− Gastos financieros '+(gfFinPct*100).toFixed(2).replace(/\.?0+$/,'')+'%',-tot.gfFin,null,'#B11425'],
+          ['− Gastos financieros'+(cqDesc>0?(()=>{
+              const ts=cqPlan.filter(c=>c.vendido).map(c=>c.tna);
+              const mn=Math.min(...ts), mx=Math.max(...ts);
+              const tstr = mn===mx ? 'TNA '+mn+'%' : 'TNA '+mn+'–'+mx+'%';
+              return ' ('+cqDesc+' de '+cqN+' cheques · '+tstr+')';
+            })():' (sin cheques vendidos)')+' · '+(gfFinPct*100).toFixed(2)+'%',-tot.gfFin,null,'#B11425'],
           ['= RESULTADO NETO',tot.resultado,mn,colRes],
         ].filter(Boolean).map(([lab,val,pct,col],i,arr)=>{
           const isLast=i===arr.length-1;
@@ -2370,9 +2471,17 @@ function openCotizador(){
   overlay.addEventListener('change',e=>{
     if(e.target.id==='cotiz-vend') calcCotiz();
   });
-  ['cp-desc','cp-com','cp-iibb','cp-gffin','cp-gf'].forEach(id=>{
+  ['cp-desc','cp-com','cp-iibb','cp-gf','cq-n','cq-int','cq-desc'].forEach(id=>{
     const el=document.getElementById(id);
     if(el) el.addEventListener('input', calcCotiz);
+  });
+  const tnaBase=document.getElementById('cq-tna');
+  if(tnaBase) tnaBase.addEventListener('input',e=>{
+    const v=parseFloat(e.target.value)||0;
+    cqTNAs={};                 // reset: todas vuelven a la base
+    Object.keys(cqTNAs);
+    cqSigStruct='';            // forzar re-dibujo de la tabla
+    calcCotiz();
   });
 
   // PDF export
@@ -2383,7 +2492,10 @@ function openCotizador(){
     const descPct2=getCPParam('cp-desc',RS.descPct);
     const comPct2=getCPParam('cp-com',RS.comPct);
     const iibbPct2=getCPParam('cp-iibb',RS.iibbPct);
-    const gfFinPct2=getCPParam('cp-gffin',RS.gfFinPct);
+    const cqN2   = Math.max(0,Math.round(getCPParam('cq-n',0)));
+    const cqInt2 = Math.max(1,Math.round(getCPParam('cq-int',30)));
+    const cqDesc2= Math.min(cqN2,Math.max(0,Math.round(getCPParam('cq-desc',0))));
+    const cqTNA2 = getCPParam('cq-tna',0);
     const gfPct2=getCPParam('cp-gf',RS.totalVentasRef>0?RS.gastoFijoTotal/RS.totalVentasRef*100:0);
     const fecha=new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
     const linStr=cotizLinea===1?'Línea 1 (Facturado)':'Línea 2';
@@ -2405,7 +2517,9 @@ function openCotizador(){
       +'<span>Descuento: <b>'+descPct2+'%</b></span>'
       +'<span>Comisión: <b>'+comPct2+'%</b></span>'
       +(cotizLinea===1?'<span>IIBB+CyI: <b>'+iibbPct2+'%</b></span>':'')
-      +'<span>GF financiero: <b>'+gfFinPct2+'%</b></span>'
+      +(cqN2>0?'<span>Cheques: <b>'+cqN2+' c/'+cqInt2+' días · '+cqDesc2+' vendidos'
+          +(cqDesc2>0?' · TNA '+Object.keys(cqTNAs).filter(k=>+k>cqN2-cqDesc2).map(k=>cqTNAs[k]+'%').join(' / '):'')
+          +'</b></span>':'<span>Cheques: <b>sin financiación</b></span>')
       +'<span>GF fijo: <b>'+gfPct2+'%</b></span>'
       +'</div>'
       +cleanHTML
