@@ -2069,16 +2069,16 @@ function calcSens(){
   </div>`;
 }
 
-function paramRow(label, key, unit, val, hint){
+function paramRow(label, key, val, hint){
   return `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line2)">
-    <div>
+    <div style="flex:1;padding-right:8px">
       <div style="font-size:12px;font-weight:600;color:var(--ink)">${label}</div>
       <div style="font-size:10.5px;color:var(--muted)">${hint}</div>
     </div>
     <div style="display:flex;align-items:center;gap:4px">
       <input id="p-${key}" type="number" min="0" max="100" step="0.1" value="${val}"
         style="width:60px;padding:5px 6px;border:1px solid var(--line);border-radius:7px;font-size:13px;font-family:Oswald,sans-serif;font-weight:600;color:var(--navy);text-align:right">
-      <span style="font-size:12px;color:var(--muted)">${unit}</span>
+      <span style="font-size:12px;color:var(--muted)">%</span>
     </div>
   </div>`;
 }
@@ -2287,7 +2287,7 @@ function openCotizador(){
           <div style="font-family:Oswald,sans-serif;font-size:18px;font-weight:700;color:#0f182b">$${fmtARS(tot.monto)}</div></div>
         <div><div style="font-size:10.5px;color:#5b6b86;font-weight:600;margin-bottom:3px">Lo cobra el cliente</div>
           <div style="font-family:Oswald,sans-serif;font-size:18px;font-weight:700;color:#01216A">$${fmtARS(tot.cobrado)}</div>
-          <div style="font-size:10.5px;color:#5b6b86">con ${RS.descPct}% dto.</div></div>
+          <div style="font-size:10.5px;color:#5b6b86">con ${(descPct*100).toFixed(1)}% dto.</div></div>
         <div><div style="font-size:10.5px;color:#5b6b86;font-weight:600;margin-bottom:3px">Resultado neto</div>
           <div style="font-family:Oswald,sans-serif;font-size:22px;font-weight:700;color:${colRes}">$${fmtARS(tot.resultado)}</div>
           <div style="font-size:11px;font-weight:700;color:${colRes}">${mn.toFixed(2)}% sobre lista</div></div>
@@ -2297,12 +2297,12 @@ function openCotizador(){
       <div style="background:#fff;border-radius:9px;overflow:hidden;border:1px solid ${bdRes}">
         ${[
           ['Precio lista (monto de venta)',tot.monto,null,'#01216A'],
-          ['− Descuento '+RS.descPct+'%',-tot.descuento,null,'#B11425'],
+          ['− Descuento '+(descPct*100).toFixed(1)+'%',-tot.descuento,null,'#B11425'],
           ['− Costo mercadería (MB '+((tot.monto>0?(tot.monto-tot.costo)/tot.monto*100:0).toFixed(1))+'%)',-tot.costo,null,'#B11425'],
           ['− Comisión '+(vComRate===0?'(sin comisión)':(vComRate*100).toFixed(1)+'%'),-tot.comision,null,vComRate===0?'#5b6b86':'#B11425'],
-          cotizLinea===1?['− IIBB + CyI '+RS.iibbPct+'%',-tot.iibb,null,'#B11425']:null,
+          cotizLinea===1?['− IIBB + CyI '+(iibbPct*100).toFixed(2).replace(/\.?0+$/,'')+'%',-tot.iibb,null,'#B11425']:null,
           gfPct>0?['− Gastos fijos '+(gfPct*100).toFixed(2)+'%',-tot.gf,null,'#B11425']:null,
-          ['− Gastos financieros '+RS.gfFinPct+'%',-tot.gfFin,null,'#B11425'],
+          ['− Gastos financieros '+(gfFinPct*100).toFixed(2).replace(/\.?0+$/,'')+'%',-tot.gfFin,null,'#B11425'],
           ['= RESULTADO NETO',tot.resultado,mn,colRes],
         ].filter(Boolean).map(([lab,val,pct,col],i,arr)=>{
           const isLast=i===arr.length-1;
