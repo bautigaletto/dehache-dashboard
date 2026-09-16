@@ -2371,6 +2371,10 @@ function openCotizador(){
     if(!el) return;
     if(!rows.length){el.innerHTML='<div style="text-align:center;color:#5b6b86;padding:16px;font-size:13px">Ingresá al menos un ítem con monto y MB%</div>';return;}
 
+    // Margen bruto = monto − descuento − costo de mercadería
+    const mbPesos = tot.monto - tot.descuento - tot.costo;
+    const mbPctCob = tot.cobrado>0 ? mbPesos/tot.cobrado*100 : 0;
+
     const colRes=tot.resultado>=0?'#1f8a5b':'#B11425';
     const bgRes =tot.resultado>=0?'#f0faf5':'#fff8f8';
     const bdRes =tot.resultado>=0?'#c3e6d6':'#f6c6cc';
@@ -2384,6 +2388,9 @@ function openCotizador(){
         <div><div style="font-size:10.5px;color:#5b6b86;font-weight:600;margin-bottom:3px">Lo cobra el cliente</div>
           <div style="font-family:Oswald,sans-serif;font-size:18px;font-weight:700;color:#01216A">$${fmtARS(tot.cobrado)}</div>
           <div style="font-size:10.5px;color:#5b6b86">con ${(descPct*100).toFixed(1)}% dto.</div></div>
+        <div><div style="font-size:10.5px;color:#5b6b86;font-weight:600;margin-bottom:3px">Margen bruto</div>
+          <div style="font-family:Oswald,sans-serif;font-size:18px;font-weight:700;color:#E0982B">$${fmtARS(mbPesos)}</div>
+          <div style="font-size:10.5px;color:#5b6b86">${mbPctCob.toFixed(2)}% s/cobrado</div></div>
         <div><div style="font-size:10.5px;color:#5b6b86;font-weight:600;margin-bottom:3px">Resultado neto</div>
           <div style="font-family:Oswald,sans-serif;font-size:22px;font-weight:700;color:${colRes}">$${fmtARS(tot.resultado)}</div>
           <div style="font-size:11px;font-weight:700;color:${colRes}">${mn.toFixed(2)}% sobre lista</div></div>
@@ -2395,6 +2402,7 @@ function openCotizador(){
           ['Precio lista (monto de venta)',tot.monto,null,'#01216A'],
           ['− Descuento '+(descPct*100).toFixed(1)+'%',-tot.descuento,null,'#B11425'],
           ['− Costo mercadería (MB '+((tot.monto>0?(tot.monto-tot.costo)/tot.monto*100:0).toFixed(1))+'%)',-tot.costo,null,'#B11425'],
+          ['= Margen bruto',mbPesos,mbPctCob,'#E0982B',true],
           ['− Comisión '+(vComRate===0?'(sin comisión)':(vComRate*100).toFixed(1)+'%'),-tot.comision,null,vComRate===0?'#5b6b86':'#B11425'],
           cotizLinea===1?['− IIBB + CyI '+(iibbPct*100).toFixed(2).replace(/\.?0+$/,'')+'%',-tot.iibb,null,'#B11425']:null,
           gfPct>0?['− Gastos fijos '+(gfPct*100).toFixed(2)+'%',-tot.gf,null,'#B11425']:null,
@@ -2405,13 +2413,14 @@ function openCotizador(){
               return ' ('+cqDesc+' de '+cqN+' cheques · '+tstr+')';
             })():' (sin cheques vendidos)')+' · '+(gfFinPct*100).toFixed(2)+'%',-tot.gfFin,null,'#B11425'],
           ['= RESULTADO NETO',tot.resultado,mn,colRes],
-        ].filter(Boolean).map(([lab,val,pct,col],i,arr)=>{
+        ].filter(Boolean).map(([lab,val,pct,col,isSub],i,arr)=>{
           const isLast=i===arr.length-1;
           return `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 12px;
             border-bottom:${isLast?'none':'1px solid #f0f4fa'};
-            background:${isLast?bgRes:'#fff'};
-            font-weight:${isLast?700:400}">
-            <span style="font-size:12.5px;color:${isLast?col:'#0f182b'}">${lab}</span>
+            border-top:${isSub?'1.5px solid #f5d9b0':'none'};
+            background:${isLast?bgRes:isSub?'#fff8f0':'#fff'};
+            font-weight:${isLast||isSub?700:400}">
+            <span style="font-size:12.5px;color:${isLast||isSub?col:'#0f182b'}">${lab}</span>
             <span style="font-family:Oswald,sans-serif;font-size:13px;font-weight:700;color:${col}">
               ${val<0?'−':''}$${fmtARS(Math.abs(val))}
               ${pct!=null?`<span style="font-size:11px;font-weight:600"> (${pct.toFixed(2)}%)</span>`:''}
