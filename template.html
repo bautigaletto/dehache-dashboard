@@ -1623,7 +1623,8 @@ function recalcRent(){
   }
 
   const totMN = totCobrado>0?totResultado/totCobrado*100:0;
-  const mbAvg  = detail.length>0?detail.reduce((s,r)=>s+r.mb,0)/detail.length:0;
+  // Ponderado por monto: un promedio simple de los % lo distorsionan las líneas de importe ínfimo
+  const mbAvg  = totMonto>0 ? (totMonto-totCosto)/totMonto*100 : 0;
   const totMbBruto = totMonto-totDescuento-totCosto; // ganancia bruta en $
 
   const cascade=[
@@ -1646,7 +1647,7 @@ function recalcRent(){
     <!-- KPIs -->
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:12px;margin-bottom:14px">
       ${kpiRent('Ventas del mes',fmtM(totMonto),detail.length+' líneas (sin Fletes)',false,'var(--navy)')}
-      ${kpiRent('MB promedio',mbAvg.toFixed(1)+'%','margen bruto sobre precio de venta',false,'var(--amber)')}
+      ${kpiRent('MB ponderado',mbAvg.toFixed(1)+'%','margen bruto sobre precio de lista',false,'var(--amber)')}
       ${kpiRent('GF aplicado',(gfPct*100).toFixed(2)+'%',gfPct>0?'$'+fmtARS(totGF)+' en total':'Ingresá ventas y gasto fijo',false,'var(--muted)')}
       ${kpiRent('Resultado neto',fmtM(totResultado),totMN.toFixed(2)+'% sobre cobrado',totResultado<0,totResultado>=0?'var(--ok)':'var(--red)')}
     </div>
