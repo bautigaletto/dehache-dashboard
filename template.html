@@ -1643,6 +1643,27 @@ function recalcRent(){
   const vendArr  = [...byVend.values()].sort((a,b)=>b.monto-a.monto);
   const nivelArr = [...byNivel.values()].sort((a,b)=>b.monto-a.monto);
 
+  // ── Facturación por línea (no depende del margen bruto) ──
+  if(window.lineaScope===undefined) window.lineaScope='mes';
+  const lnScope = window.lineaScope;
+  const lnD = (()=>{
+    const byV=new Map(); let t1=0,t2=0;
+    for(let i=0;i<R.imp.length;i++){
+      if(R.n[i]===fletesIdx) continue;                         // sin Fletes, igual que el resto
+      if(lnScope==='mes' && R.m[i]!==RS.selMonth) continue;
+      const base=R.imp[i];
+      const val =R.ln[i]===2 ? base*(1+L2_UPLIFT) : base;      // L2 con +10,5%
+      const vn  =M.vendors[R.v[i]]||'—';
+      if(!byV.has(R.v[i])) byV.set(R.v[i],{name:vn,l1:0,l2:0,base2:0});
+      const o=byV.get(R.v[i]);
+      if(R.ln[i]===2){o.l2+=val;o.base2+=base;t2+=val;} else {o.l1+=val;t1+=val;}
+    }
+    return {rows:[...byV.values()].filter(o=>o.l1+o.l2!==0).sort((a,b)=>(b.l1+b.l2)-(a.l1+a.l2)),t1,t2};
+  })();
+  const lnTot = lnD.t1+lnD.t2;
+  const lnP1  = lnTot>0 ? lnD.t1/lnTot*100 : 0;
+  const lnP2  = lnTot>0 ? lnD.t2/lnTot*100 : 0;
+
   out.innerHTML=`
     <!-- KPIs -->
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:12px;margin-bottom:14px">
@@ -1671,6 +1692,87 @@ function recalcRent(){
               <div style="height:10px;border-radius:4px;background:${bc};width:${bw}%"></div></div></td>
           </tr>`;
         }).join('')}</tbody>
+      </table></div>
+    </div>
+
+    <!-- Facturación por línea -->
+    <div class="card" style="margin-bottom:14px">
+      <div class="sec-h" style="margin-bottom:14px;flex-wrap:wrap;gap:8px">
+        <span class="bar" style="background:#E0982B"></span>
+        <h2>Facturación por línea</h2>
+        <span class="sub">Línea 2 con el +10,5% aplicado · sin Fletes</span>
+        <div style="margin-left:auto;display:flex;gap:6px">
+          <button data-lnscope="mes" style="padding:6px 13px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;
+            border:1.5px solid ${lnScope==='mes'?'var(--navy)':'var(--line)'};
+            background:${lnScope==='mes'?'var(--navy)':'#fff'};color:${lnScope==='mes'?'#fff':'var(--muted)'}">${M.monthsFull[RS.selMonth-1]||M.months[RS.selMonth-1]}</button>
+          <button data-lnscope="anio" style="padding:6px 13px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;
+            border:1.5px solid ${lnScope==='anio'?'var(--navy)':'var(--line)'};
+            background:${lnScope==='anio'?'var(--navy)':'#fff'};color:${lnScope==='anio'?'#fff':'var(--muted)'}">Acumulado 2026</button>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:14px">
+        <div style="background:#f4f7ff;border-radius:11px;padding:14px;border-left:4px solid var(--navy)">
+          <div style="font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Línea 1 · facturado</div>
+          <div style="font-family:Oswald,sans-serif;font-size:24px;font-weight:700;color:var(--navy)">${lnP1.toFixed(1)}%</div>
+          <div style="font-size:12.5px;color:var(--ink);font-family:Oswald,sans-serif;font-weight:600;margin-top:2px">$${fmtARS(lnD.t1)}</div>
+        </div>
+        <div style="background:#fff8f0;border-radius:11px;padding:14px;border-left:4px solid var(--amber)">
+          <div style="font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Línea 2 · con +10,5%</div>
+          <div style="font-family:Oswald,sans-serif;font-size:24px;font-weight:700;color:var(--amber)">${lnP2.toFixed(1)}%</div>
+          <div style="font-size:12.5px;color:var(--ink);font-family:Oswald,sans-serif;font-weight:600;margin-top:2px">$${fmtARS(lnD.t2)}</div>
+        </div>
+        <div style="background:var(--bg);border-radius:11px;padding:14px;border-left:4px solid var(--muted)">
+          <div style="font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Total</div>
+          <div style="font-family:Oswald,sans-serif;font-size:24px;font-weight:700;color:var(--ink)">${fmtM(lnTot)}</div>
+          <div style="font-size:12.5px;color:var(--muted);margin-top:2px">$${fmtARS(lnTot)}</div>
+        </div>
+      </div>
+
+      <!-- Barra apilada -->
+      <div style="display:flex;height:26px;border-radius:7px;overflow:hidden;margin-bottom:6px">
+        <div style="width:${lnP1}%;background:var(--navy);display:flex;align-items:center;justify-content:center;color:#fff;font-size:11.5px;font-weight:700">${lnP1>=8?'L1 '+lnP1.toFixed(1)+'%':''}</div>
+        <div style="width:${lnP2}%;background:var(--amber);display:flex;align-items:center;justify-content:center;color:#fff;font-size:11.5px;font-weight:700">${lnP2>=8?'L2 '+lnP2.toFixed(1)+'%':''}</div>
+      </div>
+      <div style="display:flex;gap:14px;font-size:11px;color:var(--muted);margin-bottom:16px">
+        <span style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:2px;background:var(--navy)"></span>Línea 1 (facturado)</span>
+        <span style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:2px;background:var(--amber)"></span>Línea 2 (+10,5%)</span>
+      </div>
+
+      <!-- Por vendedor -->
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">Apertura por vendedor</div>
+      <div style="overflow-x:auto"><table class="tbl" style="min-width:560px">
+        <thead><tr>
+          <th>Vendedor</th>
+          <th class="r">Línea 1</th><th class="r">%</th>
+          <th class="r">Línea 2</th><th class="r">%</th>
+          <th class="r">Total</th><th class="r">% del total</th>
+        </tr></thead>
+        <tbody>${lnD.rows.map(v=>{
+          const t=v.l1+v.l2;
+          const p1=t>0?v.l1/t*100:0, p2=t>0?v.l2/t*100:0;
+          return `<tr>
+            <td><b>${v.name}</b>
+              <div style="display:flex;height:5px;border-radius:3px;overflow:hidden;margin-top:4px;max-width:120px">
+                <div style="width:${p1}%;background:var(--navy)"></div><div style="width:${p2}%;background:var(--amber)"></div>
+              </div></td>
+            <td class="r">${fmtM(v.l1)}</td>
+            <td class="r" style="color:var(--navy);font-weight:700">${p1.toFixed(1)}%</td>
+            <td class="r">${fmtM(v.l2)}</td>
+            <td class="r" style="color:var(--amber);font-weight:700">${p2.toFixed(1)}%</td>
+            <td class="r" style="font-weight:700">${fmtM(t)}</td>
+            <td class="r" style="color:var(--muted)">${lnTot>0?(t/lnTot*100).toFixed(1):'0.0'}%</td>
+          </tr>`;}).join('')}
+          <tr style="background:#eef3ff;font-weight:700">
+            <td><b>TOTAL</b></td>
+            <td class="r">${fmtM(lnD.t1)}</td>
+            <td class="r" style="color:var(--navy)">${lnP1.toFixed(1)}%</td>
+            <td class="r">${fmtM(lnD.t2)}</td>
+            <td class="r" style="color:var(--amber)">${lnP2.toFixed(1)}%</td>
+            <td class="r">${fmtM(lnTot)}</td>
+            <td class="r">100%</td>
+          </tr>
+        </tbody>
       </table></div>
     </div>
 
@@ -1899,6 +2001,11 @@ function recalcRent(){
 
     out.innerHTML = diagHTML + out.innerHTML;
   }
+
+  // Toggle mes / acumulado de la sección de líneas
+  out.querySelectorAll('[data-lnscope]').forEach(b=>{
+    b.onclick=()=>{ window.lineaScope=b.dataset.lnscope; recalcRent(); };
+  });
 
   // Wire slider
   setTimeout(()=>{
