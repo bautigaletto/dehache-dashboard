@@ -1649,7 +1649,7 @@ function recalcRent(){
   const lnD = (()=>{
     const byV=new Map(); let t1=0,t2=0;
     for(let i=0;i<R.imp.length;i++){
-      if(R.n[i]===fletesIdx) continue;                         // sin Fletes, igual que el resto
+      // Este indicador SÍ incluye el nivel Fletes (a diferencia del resto de Rentabilidad)
       if(lnScope==='mes' && R.m[i]!==RS.selMonth) continue;
       const base=R.imp[i];
       const val =R.ln[i]===2 ? base*(1+L2_UPLIFT) : base;      // L2 con +10,5%
@@ -1700,7 +1700,7 @@ function recalcRent(){
       <div class="sec-h" style="margin-bottom:14px;flex-wrap:wrap;gap:8px">
         <span class="bar" style="background:#E0982B"></span>
         <h2>Facturación por línea</h2>
-        <span class="sub">Línea 2 con el +10,5% aplicado · sin Fletes</span>
+        <span class="sub">Línea 2 con el +10,5% aplicado · incluye Fletes</span>
         <div style="margin-left:auto;display:flex;gap:6px">
           <button data-lnscope="mes" style="padding:6px 13px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;
             border:1.5px solid ${lnScope==='mes'?'var(--navy)':'var(--line)'};
