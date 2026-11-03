@@ -509,6 +509,7 @@ function renderPrincipal(){
         ${kpi('Niveles en meta',beItems.filter(d=>d.tgt>0&&d.sales>=d.tgt).length+' / '+beItems.filter(d=>d.tgt>0).length,'superan equilibrio',beItems.filter(d=>d.tgt>0&&d.sales>=d.tgt).length<beItems.filter(d=>d.tgt>0).length/2,'◎')}
       </div>
     </div>
+    ${bandaSemana()}
   </div>
 
   <div class="sec"><div class="sec-h"><span class="bar"></span><h2>Punto de equilibrio por nivel</h2>
@@ -525,12 +526,14 @@ function renderPrincipal(){
       <div class="rk">${rankRows(zRank,zMax,'zrank')}</div></div>
   </div></div>
 
-  <div class="sec"><div class="card">
-    <div class="sec-h" style="margin-bottom:6px"><span class="bar"></span><h2>Evolución mensual 2026</h2>
-      <span class="sub">línea punteada = objetivo $300 M</span></div>
-    <div class="trend">${trendChart(idx)}</div></div>
-  </div>`;
 
+  <div class="sec"><div class="card">
+    <div class="sec-h" style="margin-bottom:14px"><span class="bar"></span><h2>Calendario de venta y reparto</h2>
+      <span class="sub">ciclo rotativo de zonas · feriados nacionales</span></div>
+    ${calendarioHTML()}
+  </div></div>`;
+
+  wireCalendario();
   app().querySelectorAll('.be').forEach(b=>b.onclick=()=>{const l=+b.dataset.lvl;
     state.level=state.level===l?null:l;render();});
   app().querySelectorAll('[data-vrank]').forEach(r=>r.onclick=()=>{state.vendor=+r.dataset.vrank;state.page='vendedores';render();});
@@ -2647,6 +2650,136 @@ function openCotizador(){
 
   renderItems();
   calcCotiz();
+}
+
+
+/* ============ CALENDARIO COMERCIAL ============ */
+// Ciclo de 5 semanas: lo que se vende una semana se reparte la siguiente.
+// Validado contra el calendario 2026 (mayo–diciembre).
+const CAL_ANCLA = new Date(2026,5,1);            // lunes 01/06/2026 = inicio de ciclo
+const CAL_VENTA   = ['11 / 3','2 y 4','12 / 5 y 6','13 y 14 / 23','10 / 1'];
+const CAL_REPARTO = ['11','2 y 4','12 / 5 y 6','13 y 14','10'];
+const CAL_ZONAS = {
+  '1':'Río Cuarto · Las Higueras','2':'Sur · V. Mackenna–Laboulaye','3':'Sampacho · Moldes · Adelia M.',
+  '4':'V. Mercedes · Chaján','5':'San Luis · La Toma','6':'Traslasierra · Achiras–Merlo',
+  '10':'Huinca Renancó · E. Castex','11':'Italó · Gral. Pico · Catriló','12':'C. Paz · Despeñaderos',
+  '13':'La Rioja','14':'Catamarca','23':'R8 · R11 · R158 · R6 · R36'
+};
+const FERIADOS={
+  '2026-11-23':'Soberanía Nacional','2026-12-08':'Inmaculada Concepción','2026-12-25':'Navidad',
+  '2027-01-01':'Año Nuevo','2027-02-08':'Carnaval','2027-02-09':'Carnaval',
+  '2027-03-24':'Día de la Memoria','2027-03-26':'Viernes Santo','2027-04-02':'Malvinas',
+  '2027-05-01':'Día del Trabajador','2027-05-25':'Revolución de Mayo',
+  '2027-06-20':'Paso a la Inmortalidad de Belgrano','2027-06-21':'Paso a la Inmortalidad de Güemes',
+  '2027-07-09':'Día de la Independencia','2027-08-16':'Paso a la Inmortalidad de San Martín',
+  '2027-10-11':'Diversidad Cultural','2027-11-20':'Soberanía Nacional',
+  '2027-12-08':'Inmaculada Concepción','2027-12-25':'Navidad'
+};
+const MESES_L=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+function lunesDe(d){ const x=new Date(d.getFullYear(),d.getMonth(),d.getDate()); const w=(x.getDay()+6)%7; x.setDate(x.getDate()-w); return x; }
+function calSlot(d){ const dif=Math.round((lunesDe(d)-CAL_ANCLA)/604800000); return ((dif%5)+5)%5; }
+function calVenta(d){ return CAL_VENTA[calSlot(d)]; }
+function calReparto(d){ return CAL_REPARTO[(calSlot(d)+4)%5]; }
+function iso(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function esFeriado(d){ return FERIADOS[iso(d)]||null; }
+// "12 / 5 y 6" → ['12','5','6']
+function zonasDe(txt){ return txt.split(/[\/,]|\sy\s/).map(s=>s.trim()).filter(Boolean); }
+function chipsZonas(txt,color){
+  return zonasDe(txt).map(z=>`<span title="${CAL_ZONAS[z]||('Zona '+z)}" style="display:inline-block;background:${color};color:#fff;
+    border-radius:6px;padding:2px 8px;font-family:Oswald,sans-serif;font-weight:600;font-size:13px;margin:2px 3px 2px 0">${z}</span>`).join('');
+}
+function listaZonas(txt){ return zonasDe(txt).map(z=>CAL_ZONAS[z]||('Zona '+z)).join(' · '); }
+
+/* Banda "esta semana" para la hoja Principal */
+function bandaSemana(){
+  const hoy=new Date(), lun=lunesDe(hoy), vie=new Date(lun); vie.setDate(vie.getDate()+4);
+  const v=calVenta(hoy), r=calReparto(hoy);
+  const fer=esFeriado(hoy);
+  const rango=`${lun.getDate()}/${lun.getMonth()+1} al ${vie.getDate()}/${vie.getMonth()+1}`;
+  return `<div class="grid cols2" style="gap:14px;margin-top:14px">
+    <div class="card" style="border-left:5px solid var(--navy);padding:16px 18px">
+      <div style="font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">
+        Se está vendiendo · semana ${rango}</div>
+      <div style="margin-bottom:5px">${chipsZonas(v,'var(--navy)')}</div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.45">${listaZonas(v)}</div>
+    </div>
+    <div class="card" style="border-left:5px solid var(--amber);padding:16px 18px">
+      <div style="font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">
+        Se está repartiendo · semana ${rango}</div>
+      <div style="margin-bottom:5px">${chipsZonas(r,'var(--amber)')}</div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.45">${listaZonas(r)}</div>
+    </div>
+  </div>
+  ${fer?`<div style="margin-top:10px;padding:9px 14px;background:#fff8f8;border:1px solid #f6c6cc;border-radius:9px;font-size:12.5px;color:var(--red);font-weight:600">
+    🎌 Hoy es feriado: ${fer}</div>`:''}`;
+}
+
+/* Calendario mensual con el ciclo de venta y reparto */
+function calendarioHTML(){
+  if(window.calMes===undefined){ const h=new Date(); window.calMes=h.getMonth(); window.calAnio=h.getFullYear(); }
+  const Y=window.calAnio, Mo=window.calMes;
+  const hoy=new Date(), hoyIso=iso(hoy);
+  const primero=new Date(Y,Mo,1), ultimo=new Date(Y,Mo+1,0);
+  let cur=lunesDe(primero);
+  const semanas=[];
+  while(cur<=ultimo){
+    const dias=[];
+    for(let k=0;k<7;k++){ const d=new Date(cur); d.setDate(d.getDate()+k); dias.push(d); }
+    semanas.push({lun:new Date(cur),dias});
+    cur=new Date(cur); cur.setDate(cur.getDate()+7);
+  }
+  const DOW=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+  const filas=semanas.map(s=>{
+    const v=CAL_VENTA[calSlot(s.lun)], r=CAL_REPARTO[(calSlot(s.lun)+4)%5];
+    const celdas=s.dias.map(d=>{
+      const fuera=d.getMonth()!==Mo, esHoy=iso(d)===hoyIso, fer=esFeriado(d), finde=d.getDay()===0||d.getDay()===6;
+      const bg=esHoy?'#eef3ff':fer?'#fff8f8':finde?'#fafbfd':'#fff';
+      return `<td style="background:${bg};padding:5px 6px;border:1px solid var(--line2);vertical-align:top;height:46px;
+        ${fuera?'opacity:.32':''}">
+        <div style="font-family:Oswald,sans-serif;font-weight:${esHoy?700:600};font-size:13px;
+          color:${fer?'var(--red)':esHoy?'var(--navy)':'var(--ink)'}">${d.getDate()}${esHoy?' <span style="font-size:9px;font-weight:700">HOY</span>':''}</div>
+        ${fer?`<div style="font-size:9px;color:var(--red);line-height:1.15;margin-top:1px">${fer}</div>`:''}
+      </td>`;
+    }).join('');
+    return `<tr>
+      <td style="padding:6px 8px;border:1px solid var(--line2);background:var(--bg);white-space:nowrap">
+        <div style="font-size:9.5px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px">Venta</div>
+        <div style="margin-bottom:4px">${chipsZonas(v,'var(--navy)')}</div>
+        <div style="font-size:9.5px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px">Reparto</div>
+        <div>${chipsZonas(r,'var(--amber)')}</div>
+      </td>${celdas}</tr>`;
+  }).join('');
+  const fersMes=Object.entries(FERIADOS).filter(([k])=>{const p=k.split('-');return +p[0]===Y&&+p[1]===Mo+1;})
+    .map(([k,n])=>`<span style="margin-right:14px"><b style="color:var(--red)">${+k.split('-')[2]}</b> ${n}</span>`).join('');
+  return `
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+    <button id="calPrev" style="padding:6px 12px;border-radius:8px;border:1.5px solid var(--line);background:#fff;cursor:pointer;font-size:14px;font-weight:700;color:var(--navy)">‹</button>
+    <div style="font-family:Oswald,sans-serif;font-size:17px;font-weight:700;color:var(--navy);min-width:180px;text-align:center">${MESES_L[Mo]} ${Y}</div>
+    <button id="calNext" style="padding:6px 12px;border-radius:8px;border:1.5px solid var(--line);background:#fff;cursor:pointer;font-size:14px;font-weight:700;color:var(--navy)">›</button>
+    <button id="calHoy" style="padding:6px 13px;border-radius:8px;border:1.5px solid var(--line);background:#fff;cursor:pointer;font-size:12px;font-weight:600;color:var(--muted)">Hoy</button>
+    <div style="margin-left:auto;display:flex;gap:12px;font-size:11px;color:var(--muted);flex-wrap:wrap">
+      <span style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:2px;background:var(--navy)"></span>Venta</span>
+      <span style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:2px;background:var(--amber)"></span>Reparto</span>
+      <span style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:2px;background:#f6c6cc"></span>Feriado</span>
+    </div>
+  </div>
+  <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:760px;table-layout:fixed">
+    <colgroup><col style="width:148px"><col span="7" style="width:calc((100% - 148px)/7)"></colgroup>
+    <thead><tr>
+      <th style="padding:6px 8px;border:1px solid var(--line2);background:var(--navy);color:#fff;font-size:10.5px;text-transform:uppercase;letter-spacing:.5px">Zonas de la semana</th>
+      ${DOW.map(d=>`<th style="padding:6px;border:1px solid var(--line2);background:var(--navy);color:#fff;font-size:10.5px;text-transform:uppercase;letter-spacing:.5px">${d}</th>`).join('')}
+    </tr></thead>
+    <tbody>${filas}</tbody>
+  </table></div>
+  ${fersMes?`<div style="margin-top:10px;font-size:11.5px;color:var(--muted)"><b style="color:var(--ink)">Feriados del mes:</b> ${fersMes}</div>`:''}
+  <div style="margin-top:8px;font-size:11px;color:var(--muted)">Ciclo de 5 semanas: lo que se vende una semana se reparte la siguiente. Pasá el mouse por cada zona para ver su nombre.</div>`;
+}
+function wireCalendario(){
+  const p=document.getElementById('calPrev'), n=document.getElementById('calNext'), t=document.getElementById('calHoy');
+  if(p) p.onclick=()=>{ window.calMes--; if(window.calMes<0){window.calMes=11;window.calAnio--;} renderPrincipal(); };
+  if(n) n.onclick=()=>{ window.calMes++; if(window.calMes>11){window.calMes=0;window.calAnio++;} renderPrincipal(); };
+  if(t) t.onclick=()=>{ const h=new Date(); window.calMes=h.getMonth(); window.calAnio=h.getFullYear(); renderPrincipal(); };
 }
 
 /* ============ INIT ============ */
